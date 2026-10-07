@@ -3,6 +3,7 @@ import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/react-native"
 import { useCallback, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { IssueDetail } from "../shared/linear";
+import { Markdown } from "./markdown";
 import { type LinkedAgent, useAddComment, useLinkedAgents } from "./queries";
 import {
   Avatar,
@@ -243,7 +244,6 @@ function CommentItem({ theme, comment }: { theme: Theme; comment: IssueComment }
         body: { flex: 1, minWidth: 0, gap: 2 },
         meta: { color: colors.foregroundMuted, fontSize: 12 },
         author: { color: colors.foreground, fontWeight: "500" },
-        text: { color: colors.foreground, fontSize: 14, lineHeight: 20 },
       }) as const,
     [colors],
   );
@@ -255,9 +255,7 @@ function CommentItem({ theme, comment }: { theme: Theme; comment: IssueComment }
           <Text style={styles.author}>{comment.user?.displayName ?? "Integration"}</Text>
           {`  ${relativeTime(comment.createdAt)}`}
         </Text>
-        <Text selectable style={styles.text}>
-          {comment.body}
-        </Text>
+        <Markdown theme={theme} compact source={comment.body} />
       </View>
     </View>
   );

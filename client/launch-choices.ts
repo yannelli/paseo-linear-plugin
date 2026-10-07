@@ -1,4 +1,5 @@
-import { useWorkspace } from "@getpaseo/plugin/client";
+import { usePaseo } from "@getpaseo/plugin/client";
+import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { IssueDetail } from "../shared/linear";
 import type { AgentAction, LinearSettings } from "../shared/settings";
@@ -13,11 +14,20 @@ import {
 } from "./launch-plan";
 import { useLinkedAgents, useProjects, useProviders } from "./queries";
 
-const selectTarget = (workspace: { id: string; projectId: string; name: string }) => ({
-  id: workspace.id,
-  projectId: workspace.projectId,
-  name: workspace.name,
-});
+// `useWorkspace` works only inside a workspace panel, so look the workspace up by id instead.
+function useWorkspaceById(workspaceId: string | null) {
+  const paseo = usePaseo();
+  return useQuery({
+    queryKey: ["linear", "workspace", workspaceId],
+    enabled: workspaceId !== null,
+    staleTime: 60_000,
+    queryFn: async (): Promise<TargetWorkspace | null> => {
+      const { entries } = await paseo.workspaces.list();
+      const match = entries.find((entry) => entry.id === workspaceId);
+      return match ? { id: match.id, projectId: match.projectId, name: match.name } : null;
+    },
+  }).data ?? null;
+}
 
 const NO_PICKS: AgentPicks = { agent: null, model: null, effort: null, mode: null };
 
@@ -25,21 +35,18 @@ export function useLaunchChoices(input: {
   issue: IssueDetail;
   action: AgentAction;
   settings: LinearSettings;
-  workspaceId: string | null;
+  target: TargetWorkspace | null;
 }) {
   const { issue, settings, action } = input;
   const projects = useProjects();
   const providers = useProviders();
-  const target = useWorkspace(input.workspaceId ?? "", selectTarget) as TargetWorkspace | null;
+  const { target } = input;
   const prNumber = action === "review" ? pullRequestNumber(issue) : null;
   const linked = useLinkedAgents(issue.identifier);
   const agentWorkspaceId =
     linked.data?.find((agent) => agent.action === "implement" && agent.workspaceId)?.workspaceId ??
     null;
-  const agentWorkspace = useWorkspace(
-    agentWorkspaceId ?? "",
-    selectTarget,
-  ) as TargetWorkspace | null;
+  const agentWorkspace = useWorkspaceById(agentWorkspaceId);
   const [projectChoice, setProjectChoice] = useState<string | null>(null);
   const [placementChoice, setPlacementChoice] = useState<Placement | null>(null);
   const [picks, setPicks] = useState<AgentPicks>(NO_PICKS);

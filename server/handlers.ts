@@ -56,10 +56,6 @@ export function registerHandlers(server: PluginServerContext, dependencies: Hand
     };
   }
 
-  async function service(projectId: ProjectId): Promise<LinearService> {
-    return (await connect(projectId)).linear;
-  }
-
   /** Returns the cached response for a key scope without calling Linear. */
   async function readCache<T>(projectId: ProjectId, kind: string, params: unknown) {
     const credential = await credentials.resolve(projectId);

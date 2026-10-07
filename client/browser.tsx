@@ -19,7 +19,7 @@ import { Button, EmptyState, errorMessage, type Theme } from "./ui";
 
 const SPLIT_WIDTH = 820;
 const NARROW_WIDTH = 560;
-const SCREEN_TARGET: LaunchTarget = { workspaceId: null };
+const SCREEN_TARGET: LaunchTarget = { workspace: null };
 
 interface BrowserProps {
   theme: Theme;
@@ -237,14 +237,19 @@ export function LinearScreen({ theme, layout, navigation }: PluginSurfaceProps) 
 }
 
 const selectProjectId = (workspace: { projectId: string }) => workspace.projectId;
+const selectName = (workspace: { name: string }) => workspace.name;
 
 export function LinearPanel({ theme, layout, navigation, workspaceId }: PluginWorkspacePanelProps) {
   const scope = panelScope(workspaceId);
   const projectId = useWorkspace(workspaceId, selectProjectId);
+  const name = useWorkspace(workspaceId, selectName);
   const settings = useSettings(linearSettings);
   const [, update] = useBrowserState(scope);
   const seeded = useRef(false);
-  const target = useMemo(() => ({ workspaceId }), [workspaceId]);
+  const target = useMemo(
+    () => ({ workspace: projectId ? { id: workspaceId, projectId, name: name ?? "" } : null }),
+    [workspaceId, projectId, name],
+  );
   // Default the panel's team filter to the team mapped to this workspace's project, once.
   useEffect(() => {
     if (seeded.current || settings.status !== "ready" || !projectId) return;

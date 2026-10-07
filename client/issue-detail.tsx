@@ -6,6 +6,7 @@ import type { IssueDetail, IssuePatch, LinearTeam, LinearUser } from "../shared/
 import { ACTION_LABELS } from "../shared/prompts";
 import type { AgentAction } from "../shared/settings";
 import { IssueBreadcrumbs } from "./breadcrumbs";
+import { Markdown } from "./markdown";
 import { Comments, IssueLinks, IssueRelations, LinkedAgents } from "./issue-sections";
 import type { LaunchTarget } from "./launch";
 import {
@@ -107,13 +108,9 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
         fontWeight: "500",
         lineHeight: compact ? 24 : 28,
       },
-      description: {
-        color: issue.description ? colors.foreground : colors.foregroundMuted,
-        fontSize: 14,
-        lineHeight: 21,
-      },
+      description: { color: colors.foregroundMuted, fontSize: 14, lineHeight: 21 },
     } as const;
-  }, [colors, compact, issue.description]);
+  }, [colors, compact]);
   return (
     <View style={ROOT_STYLE}>
       <IssueHeader
@@ -145,9 +142,11 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
         <LinkedAgents theme={theme} identifier={issue.identifier} navigation={props.navigation} />
         <View>
           <SectionLabel theme={theme}>Description</SectionLabel>
-          <Text selectable style={styles.description}>
-            {issue.description?.trim() || "No description."}
-          </Text>
+          {issue.description?.trim() ? (
+            <Markdown theme={theme} compact={compact} source={issue.description} />
+          ) : (
+            <Text style={styles.description}>No description.</Text>
+          )}
         </View>
         <IssueRelations theme={theme} issue={issue} onOpenIssue={props.onOpenIssue} />
         <IssueLinks theme={theme} issue={issue} />

@@ -170,6 +170,8 @@ export function useProviders() {
     queryKey: queryKeys.providers,
     queryFn: async (): Promise<AgentChoice[]> => agentChoices(await paseo.providers.snapshot()),
     staleTime: 60_000,
+    // Providers report models a few seconds after the daemon starts. Poll until one is ready.
+    refetchInterval: (query) => ((query.state.data?.length ?? 0) > 0 ? false : 3_000),
   });
 }
 

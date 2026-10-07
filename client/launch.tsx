@@ -9,13 +9,14 @@ import { AGENT_ACTIONS, type AgentAction, type LinearSettings, linearSettings } 
 import { useKeyScope } from "./key-scope";
 import { type LaunchChoices, useLaunchChoices } from "./launch-choices";
 import { Chip, Field, Toggle } from "./launch-fields";
-import { linearPatch, useLaunchAgent } from "./launch-plan";
+import { linearPatch, type TargetWorkspace, useLaunchAgent } from "./launch-plan";
 import { PickerModal } from "./pickers";
 import { useCatalog, useIssue } from "./queries";
 import { Button, EmptyState, errorMessage, IconButton, SectionLabel, type Theme } from "./ui";
 
+// The workspace whose panel shows the browser. Null on the Linear screen.
 export interface LaunchTarget {
-  workspaceId: string | null;
+  workspace: TargetWorkspace | null;
 }
 
 export interface LaunchPageProps {
@@ -129,7 +130,7 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
     issue,
     action,
     settings,
-    workspaceId: props.target.workspaceId,
+    target: props.target.workspace,
   });
   const launch = useLaunchAgent();
   const label = ACTION_LABELS[action];
