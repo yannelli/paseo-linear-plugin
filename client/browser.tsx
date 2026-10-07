@@ -6,13 +6,13 @@ import {
 } from "@getpaseo/plugin/client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type LayoutChangeEvent, View } from "react-native";
-import { linearSettings } from "../shared/settings";
+import { type AgentAction, linearSettings } from "../shared/settings";
 import { ConnectCard } from "./connect";
 import { CreateIssueModal } from "./create-issue";
 import { IssueDetailView } from "./issue-detail";
 import { IssueList } from "./issue-list";
 import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
-import type { LaunchTarget } from "./launch";
+import { LaunchPage, type LaunchTarget } from "./launch";
 import { useAuthStatus, useCatalog, useProjects } from "./queries";
 import { panelScope, SCREEN_SCOPE, useBrowserState } from "./store";
 import { Button, EmptyState, errorMessage, type Theme } from "./ui";
@@ -152,6 +152,27 @@ function ConnectedBrowser(props: BrowserProps & { catalog: Catalog; projectKeys:
   const openIssue = useCallback((issueId: string) => update({ issueId }), [update]);
   const closeCreate = useCallback(() => update({ creating: false }), [update]);
   const created = useCallback((issueId: string) => update({ creating: false, issueId }), [update]);
+  const openLaunch = useCallback(
+    (action: AgentAction) => state.issueId && update({ launch: { issueId: state.issueId, action } }),
+    [update, state.issueId],
+  );
+  const closeLaunch = useCallback(() => update({ launch: null }), [update]);
+
+  if (state.launch) {
+    return (
+      <LaunchPage
+        key={`${state.launch.issueId}:${state.launch.action}`}
+        theme={theme}
+        compact={narrow}
+        issueId={state.launch.issueId}
+        action={state.launch.action}
+        target={props.target}
+        navigation={props.navigation}
+        onBack={closeLaunch}
+        onStarted={closeLaunch}
+      />
+    );
+  }
 
   return (
     <View style={styles.root} onLayout={measure}>
@@ -181,6 +202,7 @@ function ConnectedBrowser(props: BrowserProps & { catalog: Catalog; projectKeys:
             navigation={props.navigation}
             onBack={back}
             onOpenIssue={openIssue}
+            onLaunch={openLaunch}
           />
         </View>
       ) : null}

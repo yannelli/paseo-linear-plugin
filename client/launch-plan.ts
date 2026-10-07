@@ -9,7 +9,8 @@ import {
 } from "../shared/linear";
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
 import type { AgentAction, Isolation, LinearSettings } from "../shared/settings";
-import type { PaseoProjectOption, ProviderOption } from "./queries";
+import { type AgentSelection, agentConfig } from "./agent-options";
+import type { PaseoProjectOption } from "./queries";
 import { errorMessage } from "./ui";
 
 export type Placement = "worktree" | "pull-request" | "branch" | "agent-workspace" | "workspace";
@@ -24,13 +25,6 @@ export interface TargetWorkspace {
   id: string;
   projectId: string;
   name: string;
-}
-
-export interface ModelOption {
-  value: string;
-  label: string;
-  detail: string;
-  isDefault: boolean;
 }
 
 const lastProjectByTeam = new Map<string, string>();
@@ -117,32 +111,6 @@ export function resolvePlacement(
   return options[0] ?? null;
 }
 
-export function modelOptions(providers: readonly ProviderOption[] | undefined): ModelOption[] {
-  return (providers ?? []).flatMap((provider) =>
-    provider.models.map((model) => ({
-      value: `${provider.provider}/${model.id}`,
-      label: model.label,
-      detail: provider.label,
-      isDefault: model.isDefault,
-    })),
-  );
-}
-
-export function resolveModel(
-  options: readonly ModelOption[],
-  choice: string | null,
-  configured: string,
-): ModelOption | null {
-  const find = (value: string | null) => options.find((option) => option.value === value);
-  return (
-    find(choice) ??
-    find(configured) ??
-    options.find((option) => option.isDefault) ??
-    options[0] ??
-    null
-  );
-}
-
 export function linearPatch(input: {
   started: WorkflowState | null;
   moveToStarted: boolean;
@@ -159,7 +127,7 @@ export interface LaunchRequest {
   action: AgentAction;
   issue: IssueDetail;
   project: PaseoProjectOption;
-  model: string;
+  agent: AgentSelection;
   placement: Placement;
   prNumber: number | null;
   target: TargetWorkspace | null;
@@ -229,7 +197,7 @@ export function useLaunchAgent() {
       const { issue, action } = request;
       const workspace = await openWorkspace(paseo, request);
       const agent = await workspace.agents.create({
-        config: { provider: request.model },
+        config: agentConfig(request.agent),
         title: agentTitle(action, issue),
         prompt: request.prompt,
         labels: { [AGENT_LABELS.issue]: issue.identifier, [AGENT_LABELS.action]: action },

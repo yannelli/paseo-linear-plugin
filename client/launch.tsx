@@ -1,246 +1,138 @@
-import { type PluginSurfaceProps, useSettings, useWorkspace } from "@getpaseo/plugin/client";
-import { Icon, Modal, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
+import { TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
-import { Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import type { IssueDetail } from "../shared/linear";
 import { ACTION_LABELS, composePrompt } from "../shared/prompts";
-import {
-  type AgentAction,
-  type LinearSettings,
-  linearSettings,
-  type ProjectConfig,
-} from "../shared/settings";
-import {
-  defaultProjectId,
-  linearPatch,
-  modelOptions,
-  type Placement,
-  placementOptions,
-  pullRequestNumber,
-  resolveModel,
-  resolvePlacement,
-  type TargetWorkspace,
-  useLaunchAgent,
-} from "./launch-plan";
-import { Field, PromptPreview, Toggle } from "./launch-fields";
-import { PickerPage } from "./pickers";
+import { AGENT_ACTIONS, type AgentAction, type LinearSettings, linearSettings } from "../shared/settings";
 import { useKeyScope } from "./key-scope";
-import { useCatalog, useLinkedAgents, useProjects, useProviders } from "./queries";
-import { Button, errorMessage, SectionLabel, type Theme } from "./ui";
+import { type LaunchChoices, useLaunchChoices } from "./launch-choices";
+import { Chip, Field, Toggle } from "./launch-fields";
+import { linearPatch, useLaunchAgent } from "./launch-plan";
+import { PickerModal } from "./pickers";
+import { useCatalog, useIssue } from "./queries";
+import { Button, EmptyState, errorMessage, IconButton, SectionLabel, type Theme } from "./ui";
 
 export interface LaunchTarget {
   workspaceId: string | null;
 }
 
-interface LaunchProps {
+export interface LaunchPageProps {
   theme: Theme;
+  compact: boolean;
+  issueId: string;
   action: AgentAction;
-  issue: IssueDetail;
   target: LaunchTarget;
   navigation: PluginSurfaceProps["navigation"];
-  onClose(): void;
+  onBack(): void;
+  onStarted(): void;
 }
 
-type PickerKind = "project" | "placement" | "model";
+type PickerKind = "prompt" | "agent" | "model" | "effort" | "mode" | "project" | "placement";
 
-const selectTarget = (workspace: { id: string; projectId: string; name: string }) => ({
-  id: workspace.id,
-  projectId: workspace.projectId,
-  name: workspace.name,
-});
+const SCROLL_STYLE = { flex: 1 } as const;
+const PROMPT_CHOICES = AGENT_ACTIONS.map((action) => ({
+  value: action,
+  label: ACTION_LABELS[action].title,
+}));
 
-export function LaunchModal(props: LaunchProps) {
+// Full-page composer for a new agent. It replaces the issue browser until the agent starts.
+export function LaunchPage(props: LaunchPageProps) {
+  const { theme } = props;
   const settings = useSettings(linearSettings);
-  const { colors } = props.theme;
-  const { onClose } = props;
-  const label = ACTION_LABELS[props.action];
-  const icon = useMemo(
-    () => <Icon name={label.icon} size={18} color={colors.foreground} />,
-    [label.icon, colors.foreground],
-  );
-  const statusStyle = useMemo(
-    () => ({ color: settings.status === "loading" ? colors.foregroundMuted : colors.statusDanger }),
-    [settings.status, colors],
-  );
-  const openChange = useCallback(
-    (open: boolean) => {
-      if (!open) onClose();
-    },
-    [onClose],
-  );
-  let body = <Text style={statusStyle}>Loading settings…</Text>;
-  if (settings.status === "ready") body = <LaunchForm {...props} settings={settings.values} />;
-  else if (settings.status !== "loading") body = <Text style={statusStyle}>{settings.error}</Text>;
+  const issue = useIssue(props.issueId);
+  if (settings.status === "ready" && issue.data) {
+    return <LaunchComposer {...props} issue={issue.data} settings={settings.values} />;
+  }
+  const failed = settings.status !== "ready" && settings.status !== "loading";
   return (
-    <Modal
-      title={`${label.title} ${props.issue.identifier}`}
-      icon={icon}
-      open
-      onOpenChange={openChange}
+    <EmptyState
+      theme={theme}
+      icon={failed || issue.isError ? "TriangleAlert" : "RefreshCw"}
+      title={failed || issue.isError ? "Could not open the agent setup" : "Loading"}
+      detail={failed ? settings.error : issue.isError ? errorMessage(issue.error) : undefined}
     >
-      <Modal.Content>{body}</Modal.Content>
-    </Modal>
+      <Button theme={theme} label="Back to issue" icon="ChevronLeft" onPress={props.onBack} />
+    </EmptyState>
   );
 }
 
-function useLaunchChoices(props: LaunchProps & { settings: LinearSettings }) {
-  const { issue, settings, action } = props;
-  const projects = useProjects();
-  const providers = useProviders();
-  const target = useWorkspace(
-    props.target.workspaceId ?? "",
-    selectTarget,
-  ) as TargetWorkspace | null;
-  const prNumber = action === "review" ? pullRequestNumber(issue) : null;
-  const linked = useLinkedAgents(issue.identifier);
-  const agentWorkspaceId =
-    linked.data?.find((agent) => agent.action === "implement" && agent.workspaceId)?.workspaceId ??
-    null;
-  const agentWorkspace = useWorkspace(
-    agentWorkspaceId ?? "",
-    selectTarget,
-  ) as TargetWorkspace | null;
-  const [projectChoice, setProjectChoice] = useState<string | null>(null);
-  const [placementChoice, setPlacementChoice] = useState<Placement | null>(null);
-  const [modelChoice, setModelChoice] = useState<string | null>(null);
-  const projectId =
-    projectChoice ??
-    defaultProjectId({ target, teamId: issue.team.id, settings, projects: projects.data });
-  const project = projects.data?.find((entry) => entry.projectId === projectId) ?? null;
-  const placements = useMemo(
-    () =>
-      placementOptions({
-        action,
-        prNumber,
-        project,
-        branchName: issue.branchName,
-        target,
-        agentWorkspace,
-      }),
-    [action, prNumber, project, issue.branchName, target, agentWorkspace],
-  );
-  const placement = resolvePlacement(
-    placements,
-    placementChoice,
-    action,
-    settings.launch.isolation,
-  );
-  const models = useMemo(() => modelOptions(providers.data), [providers.data]);
-  const model = resolveModel(models, modelChoice, settings.launch.provider);
-  const chooseProject = useCallback((value: string) => {
-    setProjectChoice(value);
-    setPlacementChoice(null);
-  }, []);
-  const choosePlacement = useCallback(
-    (value: string) => setPlacementChoice(value as Placement),
-    [],
-  );
-  return {
-    projects,
-    providers,
-    target,
-    agentWorkspace,
-    prNumber,
-    project,
-    projectConfig: settings.projects.find((entry) => entry.projectId === projectId) ?? null,
-    placements,
-    placement,
-    models,
-    model,
-    chooseProject,
-    choosePlacement,
-    chooseModel: setModelChoice,
-  };
-}
-
-type Choices = ReturnType<typeof useLaunchChoices>;
-
-function pickerFor(kind: PickerKind, choices: Choices) {
-  if (kind === "project") {
-    return {
-      title: "Project",
-      value: choices.project?.projectId ?? null,
-      options: (choices.projects.data ?? []).map((entry) => ({
-        value: entry.projectId,
-        label: entry.displayName,
-        detail: entry.rootPath,
-      })),
-      select: choices.chooseProject,
-    };
+function pickerConfig(kind: PickerKind, choices: LaunchChoices, action: AgentAction) {
+  const { agent } = choices;
+  switch (kind) {
+    case "prompt":
+      return { title: "Prompt", icon: "FileText", value: action, options: PROMPT_CHOICES };
+    case "agent":
+      return {
+        title: "Agent",
+        icon: "Bot",
+        value: agent?.agent.id ?? null,
+        options: choices.agents.map((entry) => ({ value: entry.id, label: entry.label })),
+      };
+    case "model":
+      return {
+        title: "Model",
+        icon: "Cpu",
+        value: agent?.model.id ?? null,
+        options: (agent?.agent.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })),
+      };
+    case "effort":
+      return {
+        title: "Effort",
+        icon: "Gauge",
+        value: agent?.effort?.id ?? null,
+        options: (agent?.model.efforts ?? []).map((entry) => ({ value: entry.id, label: entry.label })),
+      };
+    case "mode":
+      return {
+        title: "Mode",
+        icon: "Shield",
+        value: agent?.mode?.id ?? null,
+        options: (agent?.agent.modes ?? []).map((entry) => ({ value: entry.id, label: entry.label })),
+      };
+    case "project":
+      return {
+        title: "Project",
+        icon: "FolderGit2",
+        value: choices.project?.projectId ?? null,
+        options: (choices.projects.data ?? []).map((entry) => ({
+          value: entry.projectId,
+          label: entry.displayName,
+          detail: entry.rootPath,
+        })),
+      };
+    case "placement":
+      return {
+        title: "Run in",
+        icon: "GitBranch",
+        value: choices.placement?.value ?? null,
+        options: choices.placements,
+      };
   }
-  if (kind === "placement") {
-    return {
-      title: "Where to run",
-      value: choices.placement?.value ?? null,
-      options: choices.placements,
-      select: choices.choosePlacement,
-    };
-  }
-  return {
-    title: "Model",
-    value: choices.model?.value ?? null,
-    options: choices.models,
-    select: choices.chooseModel,
-  };
 }
 
-function LaunchPicker(props: { theme: Theme; kind: PickerKind; choices: Choices; onDone(): void }) {
-  const config = pickerFor(props.kind, props.choices);
-  const { onDone } = props;
-  const { select } = config;
-  const choose = useCallback(
-    (value: string) => {
-      onDone();
-      select(value);
-    },
-    [onDone, select],
-  );
-  return (
-    <PickerPage
-      theme={props.theme}
-      title={config.title}
-      options={config.options}
-      value={config.value}
-      searchable={config.options.length > 8}
-      onBack={onDone}
-      onSelect={choose}
-    />
-  );
+function agentLabel(choices: LaunchChoices): string {
+  if (choices.agent) return choices.agent.agent.label;
+  return choices.providers.isPending ? "Loading…" : "None available";
 }
 
-function projectLabel(choices: Choices): string {
-  if (choices.project) return choices.project.displayName;
-  return choices.projects.isPending ? "Loading…" : "Choose a project";
-}
-
-function modelLabel(choices: Choices): string {
-  if (choices.model) return `${choices.model.detail} · ${choices.model.label}`;
-  return choices.providers.isPending ? "Loading…" : "No models available";
-}
-
-function customizationHint(config: ProjectConfig | null, action: AgentAction): string {
-  const custom =
-    config !== null &&
-    (config[action].mode !== "default" ||
-      config.instructions.trim() !== "" ||
-      config.steps.some((step) => step.trim() !== ""));
-  if (custom && config) {
-    return `Uses the custom ${ACTION_LABELS[action].title.toLowerCase()} prompt for ${config.displayName}.`;
-  }
-  return "Customize prompts per project in Settings, Plugins, Linear.";
-}
-
-function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
-  const { theme, issue, action, settings, onClose, navigation } = props;
+function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings: LinearSettings }) {
+  const { theme, compact, issue, settings, navigation, onStarted } = props;
   const { colors } = theme;
-  const label = ACTION_LABELS[action];
   const toast = useToast();
   const queries = useQueryClient();
   const catalog = useCatalog();
   const keyScope = useKeyScope();
-  const choices = useLaunchChoices(props);
+  const [action, setAction] = useState<AgentAction>(props.action);
+  const choices = useLaunchChoices({
+    issue,
+    action,
+    settings,
+    workspaceId: props.target.workspaceId,
+  });
   const launch = useLaunchAgent();
+  const label = ACTION_LABELS[action];
   const viewerId = catalog.data?.viewer.id ?? null;
   const started =
     catalog.data?.teams
@@ -251,10 +143,11 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
   const [includeComments, setIncludeComments] = useState(settings.launch.includeComments);
   const [moveToStarted, setMoveToStarted] = useState(settings.launch.moveToStarted);
   const [assignToMe, setAssignToMe] = useState(settings.launch.assignToMe);
-  const [extra, setExtra] = useState("");
   const [picker, setPicker] = useState<PickerKind | null>(null);
+  // Null until the user types. Until then the prompt follows the template and options.
+  const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const { projectConfig } = choices;
-  const prompt = useMemo(
+  const generated = useMemo(
     () =>
       composePrompt({
         action,
@@ -262,40 +155,87 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
         settings,
         project: projectConfig,
         includeComments,
-        extraInstructions: extra,
+        extraInstructions: "",
       }),
-    [action, issue, settings, projectConfig, includeComments, extra],
+    [action, issue, settings, projectConfig, includeComments],
   );
-  const styles = useMemo(
-    () => ({
-      root: { gap: 16 },
-      title: { color: colors.foreground, fontSize: 14 },
-      group: { gap: 8 },
-      toggles: { gap: 4 },
-      input: {
-        minHeight: 64,
-        padding: 10,
-        borderRadius: 8,
+  const prompt = customPrompt ?? generated;
+  const styles = useMemo(() => {
+    const padding = compact ? 16 : 24;
+    return {
+      root: { flex: 1, minHeight: 0, backgroundColor: colors.surface0 },
+      bar: {
+        height: 48,
+        paddingHorizontal: compact ? 8 : 12,
+        flexDirection: "row" as const,
+        alignItems: "center" as const,
+        gap: 8,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+      },
+      heading: { flex: 1, color: colors.foreground, fontSize: 15, fontWeight: "500" as const },
+      content: {
+        padding,
+        gap: 18,
+        paddingBottom: 48,
+        width: "100%" as const,
+        maxWidth: 820,
+        alignSelf: "center" as const,
+      },
+      issue: { color: colors.foregroundMuted, fontSize: 13 },
+      box: {
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: colors.border,
-        backgroundColor: colors.surface2,
+        backgroundColor: colors.surface1,
+        overflow: "hidden" as const,
+      },
+      input: {
+        minHeight: compact ? 200 : 280,
+        padding: 14,
         color: colors.foreground,
         fontSize: 14,
+        lineHeight: 20,
         textAlignVertical: "top" as const,
       },
-      hint: { color: colors.foregroundMuted, fontSize: 12, marginTop: 6 },
+      chips: {
+        flexDirection: "row" as const,
+        flexWrap: "wrap" as const,
+        gap: 8,
+        padding: 10,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+      },
+      note: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
+      hint: { flex: 1, color: colors.foregroundMuted, fontSize: 12 },
+      group: { gap: 8 },
       error: { color: colors.statusDanger, fontSize: 13 },
-    }),
-    [colors],
-  );
+      start: { alignSelf: compact ? ("stretch" as const) : ("flex-end" as const) },
+    };
+  }, [colors, compact]);
 
-  const closePicker = useCallback(() => setPicker(null), []);
-  const openProject = useCallback(() => setPicker("project"), []);
-  const openPlacement = useCallback(() => setPicker("placement"), []);
-  const openModel = useCallback(() => setPicker("model"), []);
+  const close = useCallback(() => setPicker(null), []);
+  const choosePrompt = useCallback((value: string) => setAction(value as AgentAction), []);
+  const select = useCallback(
+    (value: string) => {
+      setPicker(null);
+      const handlers: Record<PickerKind, (value: string) => void> = {
+        prompt: choosePrompt,
+        agent: choices.chooseAgent,
+        model: choices.chooseModel,
+        effort: choices.chooseEffort,
+        mode: choices.chooseMode,
+        project: choices.chooseProject,
+        placement: choices.choosePlacement,
+      };
+      if (picker) handlers[picker](value);
+    },
+    [picker, choices, choosePrompt],
+  );
+  const resetPrompt = useCallback(() => setCustomPrompt(null), []);
   const { mutate } = launch;
   const start = useCallback(() => {
-    if (!choices.project || !choices.model || !choices.placement) return;
+    if (!choices.project || !choices.agent || !choices.placement || !prompt.trim()) return;
     const patch = linearPatch({
       started,
       moveToStarted: canStart && moveToStarted,
@@ -307,7 +247,7 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
         action,
         issue,
         project: choices.project,
-        model: choices.model.value,
+        agent: choices.agent,
         placement: choices.placement.value,
         prNumber: choices.prNumber,
         target: choices.target,
@@ -320,10 +260,10 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
       {
         onSuccess: ({ agentId, warning }) => {
           void queries.invalidateQueries({ queryKey: ["linear"] });
-          if (warning)
+          if (warning) {
             toast.show(`Agent started. Linear was not updated: ${warning}`, { variant: "warning" });
-          else toast.show("Agent started", { variant: "success" });
-          onClose();
+          } else toast.show("Agent started", { variant: "success" });
+          onStarted();
           navigation?.openAgent({ agentId });
         },
       },
@@ -343,95 +283,135 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
     keyScope,
     queries,
     toast,
-    onClose,
+    onStarted,
     navigation,
   ]);
 
-  if (picker) {
-    return <LaunchPicker theme={theme} kind={picker} choices={choices} onDone={closePicker} />;
-  }
+  const open = (kind: PickerKind) => () => setPicker(kind);
+  const config = picker ? pickerConfig(picker, choices, action) : null;
+  const { agent } = choices;
   return (
     <View style={styles.root}>
-      <Text style={styles.title} numberOfLines={2}>
-        {issue.title}
-      </Text>
-      <View style={styles.group}>
-        <Field
-          theme={theme}
-          label="Project"
-          icon="FolderGit2"
-          value={projectLabel(choices)}
-          onPress={openProject}
-        />
-        <Field
-          theme={theme}
-          label="Run in"
-          icon="GitBranch"
-          value={choices.placement?.label ?? ""}
-          detail={choices.placement?.detail}
-          onPress={openPlacement}
-        />
-        <Field
-          theme={theme}
-          label="Model"
-          icon="Bot"
-          value={modelLabel(choices)}
-          onPress={openModel}
-        />
-      </View>
-      <View style={styles.toggles}>
-        <Toggle
-          theme={theme}
-          label="Include comments"
-          value={includeComments}
-          onChange={setIncludeComments}
-        />
-        {canStart ? (
-          <Toggle
-            theme={theme}
-            label="Move issue to In Progress"
-            value={moveToStarted}
-            onChange={setMoveToStarted}
-          />
-        ) : null}
-        {canAssign ? (
-          <Toggle
-            theme={theme}
-            label="Assign issue to me"
-            value={assignToMe}
-            onChange={setAssignToMe}
-          />
-        ) : null}
-      </View>
-      <View>
-        <SectionLabel theme={theme}>Additional instructions</SectionLabel>
-        <TextInput
-          value={extra}
-          onChangeText={setExtra}
-          multiline
-          placeholder="Optional. Appended to the prompt for this run only."
-          placeholderTextColor={colors.foregroundMuted}
-          accessibilityLabel="Additional instructions"
-          style={styles.input}
-        />
-        <Text style={styles.hint}>{customizationHint(projectConfig, action)}</Text>
-      </View>
-      <PromptPreview theme={theme} prompt={prompt} />
-      {launch.error ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {errorMessage(launch.error)}
+      <View style={styles.bar}>
+        <IconButton theme={theme} icon="ChevronLeft" label="Back to issue" onPress={props.onBack} />
+        <Text style={styles.heading} numberOfLines={1}>
+          {`${label.verb} · ${issue.identifier}`}
         </Text>
+      </View>
+      <ScrollView style={SCROLL_STYLE} contentContainerStyle={styles.content}>
+        <Text style={styles.issue} numberOfLines={2}>
+          {issue.title}
+        </Text>
+        <View style={styles.box}>
+          <TextInput
+            value={prompt}
+            onChangeText={setCustomPrompt}
+            multiline
+            placeholder="Tell the agent what to do"
+            placeholderTextColor={colors.foregroundMuted}
+            accessibilityLabel="Prompt"
+            style={styles.input}
+          />
+          <View style={styles.chips}>
+            <Chip theme={theme} label="Prompt" value={label.title} onPress={open("prompt")} />
+            <Chip theme={theme} label="Agent" value={agentLabel(choices)} onPress={open("agent")} />
+            {agent ? (
+              <Chip theme={theme} label="Model" value={agent.model.label} onPress={open("model")} />
+            ) : null}
+            {agent?.effort ? (
+              <Chip theme={theme} label="Effort" value={agent.effort.label} onPress={open("effort")} />
+            ) : null}
+            {agent?.mode ? (
+              <Chip theme={theme} label="Mode" value={agent.mode.label} onPress={open("mode")} />
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.note}>
+          <Text style={styles.hint}>
+            {customPrompt === null
+              ? "The prompt follows the options below until you edit it."
+              : "You edited the prompt. Option changes no longer update it."}
+          </Text>
+          {customPrompt === null ? null : (
+            <Button
+              theme={theme}
+              size="xs"
+              variant="ghost"
+              icon="RotateCcw"
+              label="Reset prompt"
+              onPress={resetPrompt}
+            />
+          )}
+        </View>
+        <View style={styles.group}>
+          <SectionLabel theme={theme}>Where</SectionLabel>
+          <Field
+            theme={theme}
+            label="Project"
+            icon="FolderGit2"
+            value={choices.project?.displayName ?? (choices.projects.isPending ? "Loading…" : "Choose a project")}
+            onPress={open("project")}
+          />
+          <Field
+            theme={theme}
+            label="Run in"
+            icon="GitBranch"
+            value={choices.placement?.label ?? ""}
+            detail={choices.placement?.detail}
+            onPress={open("placement")}
+          />
+        </View>
+        <View style={styles.group}>
+          <SectionLabel theme={theme}>Options</SectionLabel>
+          <Toggle
+            theme={theme}
+            label="Include comments in the prompt"
+            value={includeComments}
+            onChange={setIncludeComments}
+          />
+          {canStart ? (
+            <Toggle
+              theme={theme}
+              label="Move the issue to In Progress"
+              value={moveToStarted}
+              onChange={setMoveToStarted}
+            />
+          ) : null}
+          {canAssign ? (
+            <Toggle theme={theme} label="Assign the issue to me" value={assignToMe} onChange={setAssignToMe} />
+          ) : null}
+        </View>
+        {launch.error ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {errorMessage(launch.error)}
+          </Text>
+        ) : null}
+        <View style={styles.start}>
+          <Button
+            theme={theme}
+            variant="primary"
+            size="md"
+            icon={label.icon}
+            label={label.verb}
+            busy={launch.isPending}
+            disabled={!choices.project || !choices.agent || !prompt.trim()}
+            onPress={start}
+          />
+        </View>
+      </ScrollView>
+      {config ? (
+        <PickerModal
+          theme={theme}
+          title={config.title}
+          icon={config.icon}
+          open
+          options={config.options}
+          value={config.value}
+          searchable={config.options.length > 8}
+          onClose={close}
+          onSelect={select}
+        />
       ) : null}
-      <Button
-        theme={theme}
-        variant="primary"
-        size="md"
-        icon={label.icon}
-        label={label.verb}
-        busy={launch.isPending}
-        disabled={!choices.project || !choices.model}
-        onPress={start}
-      />
     </View>
   );
 }

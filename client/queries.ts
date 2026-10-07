@@ -22,6 +22,7 @@ import {
   updateIssueRpc,
 } from "../shared/linear";
 import { AGENT_LABELS } from "../shared/prompts";
+import { type AgentChoice, agentChoices } from "./agent-options";
 import { useKeyScope } from "./key-scope";
 
 type Scope = string | null;
@@ -163,36 +164,11 @@ export function useProjects() {
   });
 }
 
-export interface ProviderOption {
-  provider: string;
-  label: string;
-  models: { id: string; label: string; isDefault: boolean }[];
-}
-
 export function useProviders() {
   const paseo = usePaseo();
   return useQuery({
     queryKey: queryKeys.providers,
-    queryFn: async (): Promise<ProviderOption[]> => {
-      const snapshot = await paseo.providers.snapshot();
-      // App connections receive the compact catalog; full entries arrive empty there.
-      const entries =
-        snapshot.entries.length > 0 ? snapshot.entries : (snapshot.compactSnapshot?.entries ?? []);
-      return entries
-        .filter((entry) => entry.status === "ready" && entry.enabled !== false)
-        .map((entry) => ({
-          provider: entry.provider,
-          label: entry.label ?? entry.provider,
-          models: (entry.models ?? [])
-            .filter((model) => model.isSelectable !== false)
-            .map((model) => ({
-              id: model.id,
-              label: model.label,
-              isDefault: model.isDefault === true,
-            })),
-        }))
-        .filter((entry) => entry.models.length > 0);
-    },
+    queryFn: async (): Promise<AgentChoice[]> => agentChoices(await paseo.providers.snapshot()),
     staleTime: 60_000,
   });
 }

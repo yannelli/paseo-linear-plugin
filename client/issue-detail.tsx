@@ -7,7 +7,7 @@ import { ACTION_LABELS } from "../shared/prompts";
 import type { AgentAction } from "../shared/settings";
 import { IssueBreadcrumbs } from "./breadcrumbs";
 import { Comments, IssueLinks, IssueRelations, LinkedAgents } from "./issue-sections";
-import { LaunchModal, type LaunchTarget } from "./launch";
+import type { LaunchTarget } from "./launch";
 import {
   assigneeOptions,
   PickerModal,
@@ -67,6 +67,7 @@ export interface IssueDetailProps {
   navigation: PluginSurfaceProps["navigation"];
   onBack(): void;
   onOpenIssue(issueId: string): void;
+  onLaunch(action: AgentAction): void;
 }
 
 export function IssueDetailView(props: IssueDetailProps) {
@@ -95,9 +96,7 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
   const { theme, issue, compact } = props;
   const { colors } = theme;
   const [picker, setPicker] = useState<Picker>(null);
-  const [launch, setLaunch] = useState<AgentAction | null>(null);
   const update = useUpdateIssue(issue.id);
-  const closeLaunch = useCallback(() => setLaunch(null), []);
   const styles = useMemo(() => {
     const padding = compact ? 16 : 24;
     return {
@@ -142,7 +141,7 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
             ))}
           </View>
         ) : null}
-        <LaunchButtons theme={theme} onLaunch={setLaunch} />
+        <LaunchButtons theme={theme} onLaunch={props.onLaunch} />
         <LinkedAgents theme={theme} identifier={issue.identifier} navigation={props.navigation} />
         <View>
           <SectionLabel theme={theme}>Description</SectionLabel>
@@ -164,16 +163,6 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
         onUpdate={update.mutate}
         onClose={setPicker}
       />
-      {launch ? (
-        <LaunchModal
-          theme={theme}
-          action={launch}
-          issue={issue}
-          target={props.target}
-          navigation={props.navigation}
-          onClose={closeLaunch}
-        />
-      ) : null}
     </View>
   );
 }

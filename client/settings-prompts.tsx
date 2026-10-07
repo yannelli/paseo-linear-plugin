@@ -70,7 +70,7 @@ function LaunchDefaults({ launch, edit }: { launch: Launch; edit: Edit }) {
       ...(providers.data ?? []).flatMap((provider) =>
         provider.models.map((model) => ({
           label: `${provider.label} · ${model.label}`,
-          value: `${provider.provider}/${model.id}`,
+          value: `${provider.id}/${model.id}`,
         })),
       ),
     ],

@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
 import type { AssigneeFilter, IssueSort, StatusFilter } from "../shared/linear";
+import type { AgentAction } from "../shared/settings";
 
 // In-memory navigation state per browser scope ("screen" or a workspace panel). Paseo 0.10
 // screens take no params, so commands write the focused issue here before opening a surface.
@@ -17,6 +18,8 @@ export interface BrowserState {
   /** Screen only: the Paseo project whose Linear key to use. Panels use their workspace's project. */
   keyProjectId: string | null;
   creating: boolean;
+  /** The agent setup page, open over the whole browser. */
+  launch: { issueId: string; action: AgentAction } | null;
 }
 
 export const SCREEN_SCOPE = "screen";
@@ -33,6 +36,7 @@ const INITIAL: BrowserState = {
   collapsed: [],
   keyProjectId: null,
   creating: false,
+  launch: null,
 };
 const states = new Map<string, BrowserState>();
 const listeners = new Set<() => void>();
@@ -47,7 +51,7 @@ export function updateBrowser(scope: string, patch: Partial<BrowserState>): void
 }
 
 export function focusIssue(scope: string, issueId: string | null): void {
-  updateBrowser(scope, { issueId, creating: false });
+  updateBrowser(scope, { issueId, creating: false, launch: null });
 }
 
 export function useBrowserState(scope: string) {

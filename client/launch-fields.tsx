@@ -1,51 +1,55 @@
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Pressable, Switch, Text, View } from "react-native";
 import { type Theme, usePressableStyle } from "./ui";
 
-export function PromptPreview({ theme, prompt }: { theme: Theme; prompt: string }) {
-  const { colors } = theme;
-  const [open, setOpen] = useState(false);
-  const toggle = useCallback(() => setOpen((value) => !value), []);
-  const styles = useMemo(
-    () => ({
-      header: { flexDirection: "row" as const, alignItems: "center" as const, gap: 6 },
-      label: { color: colors.foregroundMuted, fontSize: 13 },
-      body: {
-        color: colors.foreground,
-        fontSize: 12,
-        lineHeight: 18,
-        padding: 10,
-        borderRadius: 8,
-        backgroundColor: colors.surface1,
-        borderWidth: 1,
-        borderColor: colors.border,
-      },
-      state: { expanded: open },
-    }),
-    [colors, open],
-  );
+// A compact picker button: a muted name, then the current value. Used under the prompt box.
+export function Chip(props: {
+  theme: Theme;
+  label: string;
+  value: string;
+  icon?: string;
+  disabled?: boolean;
+  onPress(): void;
+}) {
+  const { colors } = props.theme;
+  const styles = useMemo(() => {
+    const idle = {
+      height: 30,
+      paddingHorizontal: 10,
+      borderRadius: 15,
+      borderWidth: 1,
+      borderColor: colors.border,
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 6,
+      backgroundColor: colors.surface1,
+      opacity: props.disabled ? 0.5 : 1,
+      maxWidth: 260,
+    };
+    return {
+      idle,
+      active: { ...idle, backgroundColor: colors.surface2 },
+      label: { color: colors.foregroundMuted, fontSize: 12 },
+      value: { color: colors.foreground, fontSize: 13, flexShrink: 1 },
+    };
+  }, [colors, props.disabled]);
+  const style = usePressableStyle(styles.idle, styles.active);
   return (
-    <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={styles.state}
-        onPress={toggle}
-        style={styles.header}
-      >
-        <Icon
-          name={open ? "ChevronDown" : "ChevronRight"}
-          size={14}
-          color={colors.foregroundMuted}
-        />
-        <Text style={styles.label}>Preview prompt</Text>
-      </Pressable>
-      {open ? (
-        <Text selectable style={styles.body}>
-          {prompt}
-        </Text>
-      ) : null}
-    </>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${props.label}: ${props.value}`}
+      disabled={props.disabled}
+      onPress={props.onPress}
+      style={style}
+    >
+      {props.icon ? <Icon name={props.icon} size={13} color={colors.foregroundMuted} /> : null}
+      <Text style={styles.label}>{props.label}</Text>
+      <Text numberOfLines={1} style={styles.value}>
+        {props.value}
+      </Text>
+      <Icon name="ChevronDown" size={12} color={colors.foregroundMuted} />
+    </Pressable>
   );
 }
 

@@ -97,7 +97,12 @@ export function IssueList(props: {
       setPicker(null);
       if (picker === "sort") update({ sort: value as IssueSort });
       else if (picker === "key") {
-        update({ keyProjectId: value === KEY_DEFAULT ? null : value, issueId: null, teamId: null });
+        update({
+          keyProjectId: value === KEY_DEFAULT ? null : value,
+          issueId: null,
+          teamId: null,
+          launch: null,
+        });
       } else update({ teamId: value === ALL_TEAMS ? null : value });
     },
     [picker, update],
