@@ -10,6 +10,7 @@ import {
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
 import type { AgentAction, Isolation, LinearSettings } from "../shared/settings";
 import { type AgentSelection, agentConfig } from "./agent-options";
+import { rememberLaunch } from "./agent-preferences";
 import type { PaseoProjectOption } from "./queries";
 import { errorMessage } from "./ui";
 
@@ -91,10 +92,13 @@ export function placementOptions(input: {
   return options;
 }
 
-// Reviews look at existing work: the pull request, then the implementing agent's workspace.
+// Reviews look at existing work: the pull request, the implementing agent's workspace, then
+// the issue branch. Checking out a branch nobody pushed yet starts a new worktree instead.
 function preferredPlacement(action: AgentAction, isolation: Isolation): Placement[] {
-  if (action === "review") return ["pull-request", "agent-workspace", "workspace"];
-  return isolation === "worktree" ? ["worktree", "workspace"] : ["workspace"];
+  const review = action === "review";
+  const existing: Placement[] = review ? ["pull-request", "agent-workspace"] : [];
+  const fresh: Placement[] = isolation === "worktree" ? [review ? "branch" : "worktree"] : [];
+  return [...existing, ...fresh, "workspace"];
 }
 
 export function resolvePlacement(
@@ -139,21 +143,32 @@ export interface LaunchRequest {
   keyScope: string | null;
 }
 
-type Paseo = ReturnType<typeof usePaseo>;
+export type Paseo = ReturnType<typeof usePaseo>;
 
-async function openWorkspace(paseo: Paseo, request: LaunchRequest) {
+// Linear suggests a branch name for every issue, even when nobody has pushed that branch.
+// The plugin API passes only the daemon's message, so match its "Unknown branch" text.
+function isUnknownBranch(error: unknown): boolean {
+  return errorMessage(error).includes("Unknown branch");
+}
+
+function createIssueWorktree(paseo: Paseo, request: LaunchRequest, title: string) {
+  const { issue, project } = request;
+  return paseo.workspaces.create({
+    title,
+    source: {
+      kind: "worktree",
+      cwd: project.rootPath,
+      projectId: project.projectId,
+      action: "branch-off",
+      branchName: issue.branchName,
+    },
+  });
+}
+
+export async function openWorkspace(paseo: Paseo, request: LaunchRequest) {
   const { issue, project } = request;
   if (request.placement === "worktree") {
-    return paseo.workspaces.create({
-      title: `${issue.identifier} ${issue.title}`,
-      source: {
-        kind: "worktree",
-        cwd: project.rootPath,
-        projectId: project.projectId,
-        action: "branch-off",
-        branchName: issue.branchName,
-      },
-    });
+    return createIssueWorktree(paseo, request, `${issue.identifier} ${issue.title}`);
   }
   if (request.placement === "pull-request" && request.prNumber !== null) {
     return paseo.workspaces.create({
@@ -168,16 +183,22 @@ async function openWorkspace(paseo: Paseo, request: LaunchRequest) {
     });
   }
   if (request.placement === "branch") {
-    return paseo.workspaces.create({
-      title: `Review ${issue.identifier}`,
-      source: {
-        kind: "worktree",
-        cwd: project.rootPath,
-        projectId: project.projectId,
-        action: "checkout",
-        refName: issue.branchName,
-      },
-    });
+    const title = `Review ${issue.identifier}`;
+    try {
+      return await paseo.workspaces.create({
+        title,
+        source: {
+          kind: "worktree",
+          cwd: project.rootPath,
+          projectId: project.projectId,
+          action: "checkout",
+          refName: issue.branchName,
+        },
+      });
+    } catch (error) {
+      if (!isUnknownBranch(error)) throw error;
+      return createIssueWorktree(paseo, request, title);
+    }
   }
   if (request.placement === "agent-workspace" && request.agentWorkspace) {
     return paseo.workspaces.ref(request.agentWorkspace.id);
@@ -203,6 +224,12 @@ export function useLaunchAgent() {
         labels: { [AGENT_LABELS.issue]: issue.identifier, [AGENT_LABELS.action]: action },
       });
       lastProjectByTeam.set(issue.team.id, request.project.projectId);
+      rememberLaunch({
+        agent: request.agent.agent.id,
+        model: request.agent.model.id,
+        effort: request.agent.effort?.id ?? null,
+        mode: request.agent.mode?.id ?? null,
+      });
       let warning: string | null = null;
       if (Object.keys(request.patch).length > 0) {
         try {

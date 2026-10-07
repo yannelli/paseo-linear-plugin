@@ -103,16 +103,17 @@ Select **Start agent** or **Start review** in the issue view. The agent setup pa
 1. Edit the prompt in the prompt box if you want. The prompt follows the template and options until you edit it. Select **Reset prompt** to go back to the template.
 2. Use the controls under the prompt box, as in the Paseo composer. They set the prompt template (Implement or Review), the model, the thinking level, and the mode. The thinking level shows when the model has levels, and the mode shows when the agent has modes.
    - The model picker lists the providers first. Select a provider to see its models, or search to find models from all providers.
-   - Choosing a model from another provider also changes the agent, and resets the thinking level and mode to that agent's defaults.
+   - Choosing a model from another provider also changes the agent. The thinking level and mode change to the choices you last used with that agent, or to its defaults.
+   - The controls start from your last choices: the model, thinking level, and mode of your last launch from the plugin, then the choices Paseo remembers for new agents. A default model in the settings takes priority for the model. On the mobile app, the plugin cannot read Paseo's choices, so it remembers only launches from the current session.
 3. Choose the **Project**. The default is the project of the current workspace. Without a workspace, it is the last project you used for the team, then a project mapped to the team.
 4. Choose where the agent runs in **Run in**:
    - **New worktree** on the issue branch.
    - **Check out PR #N** for a review, when the issue links a GitHub pull request.
-   - **Check out issue branch** for a review.
+   - **Check out issue branch** for a review. If nobody pushed the branch yet, the plugin starts a new worktree on it.
    - **Existing agent workspace** or **Implementation workspace**, when an agent already works on the issue.
    - **This workspace**, or **Project folder** when you are not in a workspace of that project.
 
-   The worktree and checkout options show only for a Git project.
+   The worktree and checkout options show only for a Git project. When agents run in worktrees (the default), a review uses the pull request, then the implementation workspace, then the issue branch.
 5. Set the options: **Include comments in the prompt**, **Move the issue to In Progress**, and **Assign the issue to me**. The last two show only for Implement, and only when they would change the issue.
 6. Select **Start agent** or **Start review**.
 

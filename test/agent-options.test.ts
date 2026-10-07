@@ -90,6 +90,32 @@ describe("agent choices", () => {
     expect(resolveAgent([], none, "")).toBeNull();
   });
 
+  it("uses remembered model, effort, and mode when nothing is picked", () => {
+    const agents = agentChoices(full);
+    const none = { agent: null, model: null, effort: null, mode: null };
+    const remembered = {
+      provider: "claude",
+      providerPreferences: {
+        claude: { model: "opus", mode: "bypass", thinkingByModel: { opus: "high" } },
+      },
+    };
+    const recalled = resolveAgent(agents, none, "", remembered);
+    expect(recalled && agentConfig(recalled)).toEqual({
+      provider: "claude/opus",
+      thinkingOptionId: "high",
+      modeId: "bypass",
+    });
+    const picked = resolveAgent(agents, { ...none, effort: "low", mode: "default" }, "", remembered);
+    expect(picked && agentConfig(picked)).toMatchObject({ thinkingOptionId: "low", modeId: "default" });
+    const configured = resolveAgent(agents, none, "claude/sonnet", remembered);
+    expect(configured && agentConfig(configured)).toEqual({
+      provider: "claude/sonnet",
+      modeId: "bypass",
+    });
+    const stale = { providerPreferences: { claude: { mode: "gone" } } };
+    expect(resolveAgent(agents, none, "", stale)?.mode?.id).toBe("default");
+  });
+
   it("keeps model descriptions and mode icons", () => {
     const [claude] = agentChoices(full);
     expect(claude?.models[1]?.description).toBe("Best for everyday work");

@@ -1,5 +1,7 @@
 // Turns the daemon's provider snapshot into Agent, Model, Effort, and Mode choices.
 
+import type { AgentPreferences } from "./agent-preferences";
+
 export interface Choice {
   id: string;
   label: string;
@@ -112,20 +114,26 @@ export interface AgentPicks {
   mode: string | null;
 }
 
-/** `configured` is the settings default in `provider/model` form. Empty uses the first agent. */
+/**
+ * `configured` is the settings default in `provider/model` form. Empty falls back to the
+ * remembered agent, then the first agent. Effort and mode come from `remembered` when unpicked.
+ */
 export function resolveAgent(
   agents: readonly AgentChoice[],
   picks: AgentPicks,
   configured: string,
+  remembered: AgentPreferences = {},
 ): AgentSelection | null {
   const [configuredAgent, ...rest] = configured.split("/");
   const configuredModel = rest.join("/");
   const agent =
     agents.find((entry) => entry.id === picks.agent) ??
     agents.find((entry) => entry.id === configuredAgent) ??
+    agents.find((entry) => entry.id === remembered.provider) ??
     agents[0];
   if (!agent) return null;
-  const preferredModel = agent.id === configuredAgent ? configuredModel : null;
+  const preference = remembered.providerPreferences?.[agent.id];
+  const preferredModel = agent.id === configuredAgent ? configuredModel : preference?.model;
   const model =
     agent.models.find((entry) => entry.id === picks.model) ??
     agent.models.find((entry) => entry.id === preferredModel) ??
@@ -134,10 +142,12 @@ export function resolveAgent(
   if (!model) return null;
   const effort =
     model.efforts.find((entry) => entry.id === picks.effort) ??
+    model.efforts.find((entry) => entry.id === preference?.thinkingByModel?.[model.id]) ??
     model.efforts.find((entry) => entry.id === model.defaultEffortId) ??
     null;
   const mode =
     agent.modes.find((entry) => entry.id === picks.mode) ??
+    agent.modes.find((entry) => entry.id === preference?.mode) ??
     agent.modes.find((entry) => entry.id === agent.defaultModeId) ??
     null;
   return { agent, model, effort, mode };
