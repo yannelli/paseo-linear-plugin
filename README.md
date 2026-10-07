@@ -98,6 +98,10 @@ The highest change since the last release sets the next version. For example, `f
 
 Run `npm run release:dry-run` from a clean `main` checkout with all tags fetched to preview the next release. To complete a GitHub or npm publication that stopped after its tag was pushed, run the **Release** workflow again.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, commit message rules, and how releases work.
+
 ## License
 
 Apache License 2.0. The plugin source comes from the Linear example in [getpaseo/paseo](https://github.com/getpaseo/paseo/tree/main/plugin-examples/linear). See [NOTICE](NOTICE).
