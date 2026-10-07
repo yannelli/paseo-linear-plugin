@@ -29,6 +29,8 @@ export const TeamSchema = z.object({
   states: z.array(WorkflowStateSchema),
 });
 
+export const IssueRefSchema = z.object({ id: z.string(), identifier: z.string(), title: z.string() });
+
 export const IssueSummarySchema = z.object({
   id: z.string(),
   identifier: z.string(),
@@ -43,6 +45,7 @@ export const IssueSummarySchema = z.object({
   team: z.object({ id: z.string(), key: z.string(), name: z.string() }),
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
   labels: z.array(LabelSchema),
+  parent: IssueRefSchema.nullable(),
 });
 
 export const CommentSchema = z.object({
@@ -64,7 +67,8 @@ export const IssueDetailSchema = IssueSummarySchema.extend({
   description: z.string().nullable(),
   createdAt: z.string(),
   creator: UserSchema.nullable(),
-  parent: z.object({ id: z.string(), identifier: z.string(), title: z.string() }).nullable(),
+  // Parent chain, root first. The last entry is the direct parent.
+  ancestors: z.array(IssueRefSchema),
   children: z.array(
     z.object({
       id: z.string(),
@@ -84,68 +88,108 @@ export type LinearTeam = z.infer<typeof TeamSchema>;
 export type IssueSummary = z.infer<typeof IssueSummarySchema>;
 export type IssueDetail = z.infer<typeof IssueDetailSchema>;
 export type IssueComment = z.infer<typeof CommentSchema>;
+export type IssueRef = z.infer<typeof IssueRefSchema>;
+
+// The Paseo project whose Linear key to use. Null or absent uses the default key.
+const KeyScope = { projectId: z.string().min(1).nullable().optional() };
+export type KeyScopeInput = { projectId?: string | null };
+
+const KeySourceSchema = z.enum(["project", "file", "environment"]);
+export type KeySource = z.infer<typeof KeySourceSchema>;
 
 export const authStatusRpc = defineRpc({
   name: "linear.auth.status",
-  input: z.object({}),
+  input: z.object(KeyScope),
   output: z.object({
     configured: z.boolean(),
-    source: z.enum(["file", "environment"]).nullable(),
+    source: KeySourceSchema.nullable(),
     keyHint: z.string().nullable(),
+    projectKeys: z.array(z.object({ projectId: z.string(), keyHint: z.string() })),
   }),
 });
 
 export const authSaveRpc = defineRpc({
   name: "linear.auth.save",
-  input: z.object({ apiKey: z.string().trim().min(1, "Paste a Linear API key") }),
+  input: z.object({ apiKey: z.string().trim().min(1, "Paste a Linear API key"), ...KeyScope }),
   output: z.object({ viewerName: z.string(), organizationName: z.string() }),
 });
 
 export const authClearRpc = defineRpc({
   name: "linear.auth.clear",
-  input: z.object({}),
+  input: z.object(KeyScope),
   output: z.object({ configured: z.boolean() }),
 });
 
+export const CatalogSchema = z.object({
+  viewer: UserSchema,
+  organization: z.object({ name: z.string(), urlKey: z.string() }),
+  teams: z.array(TeamSchema),
+  users: z.array(UserSchema),
+});
+export type Catalog = z.infer<typeof CatalogSchema>;
+
 export const catalogRpc = defineRpc({
   name: "linear.catalog",
-  input: z.object({}),
-  output: z.object({
-    viewer: UserSchema,
-    organization: z.object({ name: z.string(), urlKey: z.string() }),
-    teams: z.array(TeamSchema),
-    users: z.array(UserSchema),
-  }),
+  input: z.object(KeyScope),
+  output: CatalogSchema,
 });
 
 export const ASSIGNEE_FILTERS = ["me", "anyone", "unassigned"] as const;
 export const STATUS_FILTERS = ["active", "backlog", "done", "all"] as const;
+export const ISSUE_SORTS = ["updated", "created", "priority", "due", "title"] as const;
 export type AssigneeFilter = (typeof ASSIGNEE_FILTERS)[number];
 export type StatusFilter = (typeof STATUS_FILTERS)[number];
+export type IssueSort = (typeof ISSUE_SORTS)[number];
 
 export const IssueQuerySchema = z.object({
   teamId: z.string().nullable(),
   assignee: z.enum(ASSIGNEE_FILTERS),
   status: z.enum(STATUS_FILTERS),
   query: z.string(),
+  sort: z.enum(ISSUE_SORTS).default("updated"),
   after: z.string().nullable(),
 });
-export type IssueQuery = z.infer<typeof IssueQuerySchema>;
+export type IssueQuery = z.input<typeof IssueQuerySchema>;
+
+export const IssuePageSchema = z.object({
+  issues: z.array(IssueSummarySchema),
+  endCursor: z.string().nullable(),
+  hasNextPage: z.boolean(),
+});
+export type IssuePage = z.infer<typeof IssuePageSchema>;
 
 export const listIssuesRpc = defineRpc({
   name: "linear.issues.list",
-  input: IssueQuerySchema,
-  output: z.object({
-    issues: z.array(IssueSummarySchema),
-    endCursor: z.string().nullable(),
-    hasNextPage: z.boolean(),
-  }),
+  input: IssueQuerySchema.extend(KeyScope),
+  output: IssuePageSchema,
 });
 
 export const getIssueRpc = defineRpc({
   name: "linear.issue.get",
-  input: z.object({ id: z.string().min(1) }),
+  input: z.object({ id: z.string().min(1), ...KeyScope }),
   output: z.object({ issue: IssueDetailSchema }),
+});
+
+// Stale-while-revalidate: the daemon returns its last response without calling Linear.
+const cached = <T extends z.ZodType>(schema: T) =>
+  z.object({ value: schema.nullable(), fetchedAt: z.string().nullable() });
+
+export const cachedCatalogRpc = defineRpc({
+  name: "linear.cache.catalog",
+  input: z.object(KeyScope),
+  output: cached(CatalogSchema),
+});
+
+export const cachedIssuesRpc = defineRpc({
+  name: "linear.cache.issues",
+  input: IssueQuerySchema.extend(KeyScope),
+  output: cached(IssuePageSchema),
+});
+
+export const cachedIssueRpc = defineRpc({
+  name: "linear.cache.issue",
+  input: z.object({ id: z.string().min(1), ...KeyScope }),
+  output: cached(z.object({ issue: IssueDetailSchema })),
 });
 
 export const IssuePatchSchema = z.object({
@@ -160,7 +204,7 @@ export type IssuePatch = z.infer<typeof IssuePatchSchema>;
 
 export const updateIssueRpc = defineRpc({
   name: "linear.issue.update",
-  input: z.object({ id: z.string().min(1), patch: IssuePatchSchema }),
+  input: z.object({ id: z.string().min(1), patch: IssuePatchSchema, ...KeyScope }),
   output: z.object({ issue: IssueSummarySchema }),
 });
 
@@ -173,14 +217,15 @@ export const createIssueRpc = defineRpc({
     priority: z.number().int().min(0).max(4).optional(),
     assigneeId: z.string().nullable().optional(),
     stateId: z.string().optional(),
-    projectId: z.string().nullable().optional(),
+    linearProjectId: z.string().nullable().optional(),
+    ...KeyScope,
   }),
   output: z.object({ issue: IssueSummarySchema }),
 });
 
 export const createCommentRpc = defineRpc({
   name: "linear.comment.create",
-  input: z.object({ issueId: z.string().min(1), body: z.string().trim().min(1) }),
+  input: z.object({ issueId: z.string().min(1), body: z.string().trim().min(1), ...KeyScope }),
   output: z.object({ comment: CommentSchema }),
 });
 

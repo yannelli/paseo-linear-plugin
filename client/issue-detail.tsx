@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 import type { IssueDetail, IssuePatch, LinearTeam, LinearUser } from "../shared/linear";
 import { ACTION_LABELS } from "../shared/prompts";
 import type { AgentAction } from "../shared/settings";
+import { IssueBreadcrumbs } from "./breadcrumbs";
 import { Comments, IssueLinks, IssueRelations, LinkedAgents } from "./issue-sections";
 import { LaunchModal, type LaunchTarget } from "./launch";
 import {
@@ -122,6 +123,7 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
         issue={issue}
         onBack={props.onBack}
         onRefresh={props.refetch}
+        onOpenIssue={props.onOpenIssue}
       />
       <ScrollView style={SCROLL_STYLE} contentContainerStyle={styles.content}>
         <Text selectable style={styles.title}>
@@ -182,6 +184,7 @@ function IssueHeader(props: {
   issue: IssueDetail;
   onBack(): void;
   onRefresh(): void;
+  onOpenIssue(issueId: string): void;
 }) {
   const { theme, compact, issue } = props;
   const { colors } = theme;
@@ -199,7 +202,6 @@ function IssueHeader(props: {
           borderBottomWidth: 1,
           borderBottomColor: colors.border,
         },
-        crumbs: { color: colors.foregroundMuted, fontSize: 13, flex: 1 },
       }) as const,
     [colors, compact],
   );
@@ -221,9 +223,12 @@ function IssueHeader(props: {
         label="Close issue"
         onPress={props.onBack}
       />
-      <Text style={styles.crumbs} numberOfLines={1}>
-        {issue.team.name} › {issue.identifier}
-      </Text>
+      <IssueBreadcrumbs
+        theme={theme}
+        compact={compact}
+        issue={issue}
+        onOpenIssue={props.onOpenIssue}
+      />
       <IconButton theme={theme} icon="RefreshCw" label="Refresh issue" onPress={props.onRefresh} />
       <IconButton theme={theme} icon="GitBranch" label="Copy branch name" onPress={pressCopy} />
       <IconButton theme={theme} icon="ExternalLink" label="Open in Linear" onPress={openInLinear} />

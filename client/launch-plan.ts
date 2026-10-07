@@ -167,6 +167,8 @@ export interface LaunchRequest {
   prompt: string;
   patch: IssuePatch;
   started: WorkflowState | null;
+  /** The Paseo project whose Linear key loaded the issue. */
+  keyScope: string | null;
 }
 
 type Paseo = ReturnType<typeof usePaseo>;
@@ -236,7 +238,7 @@ export function useLaunchAgent() {
       let warning: string | null = null;
       if (Object.keys(request.patch).length > 0) {
         try {
-          await updateIssue({ id: issue.id, patch: request.patch });
+          await updateIssue({ id: issue.id, patch: request.patch, projectId: request.keyScope });
         } catch (error) {
           warning = errorMessage(error);
         }

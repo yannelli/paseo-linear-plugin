@@ -11,8 +11,9 @@ import { ConnectCard } from "./connect";
 import { CreateIssueModal } from "./create-issue";
 import { IssueDetailView } from "./issue-detail";
 import { IssueList } from "./issue-list";
+import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
 import type { LaunchTarget } from "./launch";
-import { useAuthStatus, useCatalog } from "./queries";
+import { useAuthStatus, useCatalog, useProjects } from "./queries";
 import { panelScope, SCREEN_SCOPE, useBrowserState } from "./store";
 import { Button, EmptyState, errorMessage, type Theme } from "./ui";
 
@@ -26,6 +27,10 @@ interface BrowserProps {
   navigation: PluginSurfaceProps["navigation"];
   scope: string;
   target: LaunchTarget;
+  /** The Paseo project to use the Linear key of. Null uses the default key. */
+  keyProjectId: string | null;
+  /** Shows a picker for the Linear key. The screen has one; panels follow their workspace. */
+  canSwitchKey: boolean;
 }
 
 type Catalog = NonNullable<ReturnType<typeof useCatalog>["data"]>;
@@ -49,8 +54,7 @@ function LoadError(props: { theme: Theme; title: string; error: unknown; retry()
 export function IssueBrowser(props: BrowserProps) {
   const { theme } = props;
   const auth = useAuthStatus();
-  const configured = auth.data?.configured === true;
-  const catalog = useCatalog(configured);
+  const keyScope = effectiveKeyScope(props.keyProjectId, auth.data?.projectKeys);
   if (auth.isPending) {
     return <EmptyState theme={theme} icon="RefreshCw" title="Connecting to Linear" />;
   }
@@ -64,7 +68,21 @@ export function IssueBrowser(props: BrowserProps) {
       />
     );
   }
-  if (!configured) return <ConnectCard theme={theme} compact={props.compact} />;
+  if (keyScope === null && !auth.data.configured) {
+    return <ConnectCard theme={theme} compact={props.compact} />;
+  }
+  return (
+    <KeyScopeProvider key={keyScope ?? "default"} projectId={keyScope}>
+      <ScopedBrowser {...props} projectKeys={auth.data.projectKeys} />
+    </KeyScopeProvider>
+  );
+}
+
+type ProjectKeys = readonly { projectId: string }[];
+
+function ScopedBrowser(props: BrowserProps & { projectKeys: ProjectKeys }) {
+  const { theme } = props;
+  const catalog = useCatalog();
   if (catalog.isPending) {
     return <EmptyState theme={theme} icon="RefreshCw" title="Loading your Linear workspace" />;
   }
@@ -81,10 +99,26 @@ export function IssueBrowser(props: BrowserProps) {
   return <ConnectedBrowser {...props} catalog={catalog.data} />;
 }
 
-function ConnectedBrowser(props: BrowserProps & { catalog: Catalog }) {
+function useKeyOptions(enabled: boolean, projectKeys: ProjectKeys) {
+  const projects = useProjects();
+  return useMemo(() => {
+    if (!enabled || projectKeys.length === 0) return [];
+    const names = new Map(projects.data?.map((project) => [project.projectId, project.displayName]));
+    return [
+      { value: "", label: "Default key" },
+      ...projectKeys.map((entry) => ({
+        value: entry.projectId,
+        label: names.get(entry.projectId) ?? entry.projectId,
+      })),
+    ];
+  }, [enabled, projectKeys, projects.data]);
+}
+
+function ConnectedBrowser(props: BrowserProps & { catalog: Catalog; projectKeys: ProjectKeys }) {
   const { theme, catalog } = props;
   const { colors } = theme;
   const [state, update] = useBrowserState(props.scope);
+  const keyOptions = useKeyOptions(props.canSwitchKey, props.projectKeys);
   const [width, setWidth] = useState(0);
   const split = !props.compact && width >= SPLIT_WIDTH;
   const showDetail = state.issueId !== null;
@@ -129,6 +163,7 @@ function ConnectedBrowser(props: BrowserProps & { catalog: Catalog }) {
             teams={catalog.teams}
             state={state}
             update={update}
+            keyOptions={keyOptions}
           />
         </View>
       ) : null}
@@ -165,6 +200,7 @@ function ConnectedBrowser(props: BrowserProps & { catalog: Catalog }) {
 }
 
 export function LinearScreen({ theme, layout, navigation }: PluginSurfaceProps) {
+  const [state] = useBrowserState(SCREEN_SCOPE);
   return (
     <IssueBrowser
       theme={theme}
@@ -172,6 +208,8 @@ export function LinearScreen({ theme, layout, navigation }: PluginSurfaceProps) 
       navigation={navigation}
       scope={SCREEN_SCOPE}
       target={SCREEN_TARGET}
+      keyProjectId={state.keyProjectId}
+      canSwitchKey
     />
   );
 }
@@ -200,6 +238,8 @@ export function LinearPanel({ theme, layout, navigation, workspaceId }: PluginWo
       navigation={navigation}
       scope={scope}
       target={target}
+      keyProjectId={projectId ?? null}
+      canSwitchKey={false}
     />
   );
 }

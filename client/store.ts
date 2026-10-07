@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from "react";
-import type { AssigneeFilter, StatusFilter } from "../shared/linear";
+import type { AssigneeFilter, IssueSort, StatusFilter } from "../shared/linear";
 
 // In-memory navigation state per browser scope ("screen" or a workspace panel). Paseo 0.10
 // screens take no params, so commands write the focused issue here before opening a surface.
@@ -9,6 +9,13 @@ export interface BrowserState {
   assignee: AssigneeFilter;
   status: StatusFilter;
   query: string;
+  sort: IssueSort;
+  /** Shows sub-issues under their parent when both are in the list. */
+  nested: boolean;
+  /** Parent issues whose sub-issues are hidden. */
+  collapsed: readonly string[];
+  /** Screen only: the Paseo project whose Linear key to use. Panels use their workspace's project. */
+  keyProjectId: string | null;
   creating: boolean;
 }
 
@@ -21,6 +28,10 @@ const INITIAL: BrowserState = {
   assignee: "me",
   status: "active",
   query: "",
+  sort: "updated",
+  nested: true,
+  collapsed: [],
+  keyProjectId: null,
   creating: false,
 };
 const states = new Map<string, BrowserState>();

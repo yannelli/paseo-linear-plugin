@@ -9,20 +9,26 @@ import { Button, errorMessage, type Theme } from "./ui";
 
 export const LINEAR_KEY_SETTINGS_URL = "https://linear.app/settings/account/security";
 
-export function useSaveApiKey() {
+export function useSaveApiKey(projectId: string | null = null) {
   const save = useRpc(authSaveRpc);
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (apiKey: string) => save({ apiKey }),
+    mutationFn: (apiKey: string) => save({ apiKey, projectId }),
     onSuccess: () => {
       void queries.invalidateQueries({ queryKey: ["linear"] });
     },
   });
 }
 
-export function ApiKeyForm({ theme }: { theme: Theme }) {
+export function ApiKeyForm(props: {
+  theme: Theme;
+  /** Saves the key for this Paseo project only. Null saves the default key. */
+  projectId?: string | null;
+  submitLabel?: string;
+}) {
+  const { theme } = props;
   const [apiKey, setApiKey] = useState("");
-  const saveKey = useSaveApiKey();
+  const saveKey = useSaveApiKey(props.projectId ?? null);
   const toast = useToast();
   const { colors } = theme;
   const { mutate } = saveKey;
@@ -75,7 +81,7 @@ export function ApiKeyForm({ theme }: { theme: Theme }) {
         theme={theme}
         variant="primary"
         size="md"
-        label="Connect Linear"
+        label={props.submitLabel ?? "Connect Linear"}
         icon="KeyRound"
         busy={saveKey.isPending}
         disabled={!apiKey.trim()}

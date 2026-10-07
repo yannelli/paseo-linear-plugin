@@ -1,27 +1,57 @@
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   authStatusRpc,
+  cachedCatalogRpc,
+  cachedIssueRpc,
+  cachedIssuesRpc,
   catalogRpc,
   createCommentRpc,
   getIssueRpc,
   type IssueDetail,
+  type IssuePage,
   type IssuePatch,
   type IssueQuery,
   listIssuesRpc,
   updateIssueRpc,
 } from "../shared/linear";
 import { AGENT_LABELS } from "../shared/prompts";
+import { useKeyScope } from "./key-scope";
+
+type Scope = string | null;
+const scoped = (scope: Scope) => ["linear", "scope", scope ?? "default"] as const;
 
 export const queryKeys = {
   auth: ["linear", "auth"] as const,
-  catalog: ["linear", "catalog"] as const,
-  issues: ["linear", "issues"] as const,
-  issue: (id: string) => ["linear", "issue", id] as const,
+  scope: scoped,
+  catalog: (scope: Scope) => [...scoped(scope), "catalog"] as const,
+  issues: (scope: Scope) => [...scoped(scope), "issues"] as const,
+  issue: (scope: Scope, id: string) => [...scoped(scope), "issue", id] as const,
   agents: (identifier: string) => ["linear", "agents", identifier] as const,
   projects: ["linear", "projects"] as const,
   providers: ["linear", "providers"] as const,
 };
+
+// Stale-while-revalidate: the daemon's last response shows while the Linear request runs.
+function useSaved<T>(key: readonly unknown[], read: () => Promise<{ value: T | null }>, enabled: boolean) {
+  const queries = useQueryClient();
+  const fresh = queries.getQueryState(key)?.data !== undefined;
+  const saved = useQuery({
+    queryKey: [...key, "saved"],
+    queryFn: async () => (await read()).value,
+    enabled: enabled && !fresh,
+    staleTime: Number.POSITIVE_INFINITY,
+    gcTime: 60_000,
+    retry: false,
+  });
+  return saved.data ?? undefined;
+}
 
 export function useAuthStatus() {
   const status = useRpc(authStatusRpc);
@@ -29,58 +59,78 @@ export function useAuthStatus() {
 }
 
 export function useCatalog(enabled = true) {
+  const scope = useKeyScope();
   const catalog = useRpc(catalogRpc);
+  const cached = useRpc(cachedCatalogRpc);
+  const key = queryKeys.catalog(scope);
+  const saved = useSaved(key, () => cached({ projectId: scope }), enabled);
   return useQuery({
-    queryKey: queryKeys.catalog,
-    queryFn: () => catalog({}),
+    queryKey: key,
+    queryFn: () => catalog({ projectId: scope }),
+    placeholderData: saved,
     enabled,
     staleTime: 5 * 60_000,
   });
 }
 
 export function useIssues(query: Omit<IssueQuery, "after">, enabled = true) {
+  const scope = useKeyScope();
   const list = useRpc(listIssuesRpc);
+  const cached = useRpc(cachedIssuesRpc);
+  const key = [...queryKeys.issues(scope), query] as const;
+  const saved = useSaved(key, () => cached({ ...query, after: null, projectId: scope }), enabled);
+  const placeholder: InfiniteData<IssuePage, string | null> | undefined = saved
+    ? { pages: [saved], pageParams: [null] }
+    : undefined;
   return useInfiniteQuery({
-    queryKey: [...queryKeys.issues, query],
-    queryFn: ({ pageParam }) => list({ ...query, after: pageParam }),
+    queryKey: key,
+    queryFn: ({ pageParam }) => list({ ...query, after: pageParam, projectId: scope }),
     initialPageParam: null as string | null,
     getNextPageParam: (page) => (page.hasNextPage ? page.endCursor : undefined),
+    placeholderData: placeholder,
     enabled,
     staleTime: 30_000,
   });
 }
 
 export function useIssue(id: string | null) {
+  const scope = useKeyScope();
   const get = useRpc(getIssueRpc);
+  const cached = useRpc(cachedIssueRpc);
+  const key = queryKeys.issue(scope, id ?? "");
+  const saved = useSaved(key, () => cached({ id: id ?? "", projectId: scope }), id !== null);
   return useQuery({
-    queryKey: queryKeys.issue(id ?? ""),
-    queryFn: async () => (await get({ id: id ?? "" })).issue,
+    queryKey: key,
+    queryFn: async () => (await get({ id: id ?? "", projectId: scope })).issue,
+    placeholderData: saved?.issue,
     enabled: id !== null,
     staleTime: 15_000,
   });
 }
 
 export function useUpdateIssue(issueId: string) {
+  const scope = useKeyScope();
   const update = useRpc(updateIssueRpc);
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (patch: IssuePatch) => update({ id: issueId, patch }),
+    mutationFn: (patch: IssuePatch) => update({ id: issueId, patch, projectId: scope }),
     onSuccess: ({ issue }) => {
-      queries.setQueryData<IssueDetail>(queryKeys.issue(issueId), (current) =>
+      queries.setQueryData<IssueDetail>(queryKeys.issue(scope, issueId), (current) =>
         current ? { ...current, ...issue } : current,
       );
-      void queries.invalidateQueries({ queryKey: queryKeys.issues });
+      void queries.invalidateQueries({ queryKey: queryKeys.issues(scope) });
     },
   });
 }
 
 export function useAddComment(issueId: string) {
+  const scope = useKeyScope();
   const create = useRpc(createCommentRpc);
   const queries = useQueryClient();
   return useMutation({
-    mutationFn: (body: string) => create({ issueId, body }),
+    mutationFn: (body: string) => create({ issueId, body, projectId: scope }),
     onSuccess: ({ comment }) => {
-      queries.setQueryData<IssueDetail>(queryKeys.issue(issueId), (current) =>
+      queries.setQueryData<IssueDetail>(queryKeys.issue(scope, issueId), (current) =>
         current ? { ...current, comments: [...current.comments, comment] } : current,
       );
     },

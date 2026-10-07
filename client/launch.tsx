@@ -25,6 +25,7 @@ import {
 } from "./launch-plan";
 import { Field, PromptPreview, Toggle } from "./launch-fields";
 import { PickerPage } from "./pickers";
+import { useKeyScope } from "./key-scope";
 import { useCatalog, useLinkedAgents, useProjects, useProviders } from "./queries";
 import { Button, errorMessage, SectionLabel, type Theme } from "./ui";
 
@@ -237,6 +238,7 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
   const toast = useToast();
   const queries = useQueryClient();
   const catalog = useCatalog();
+  const keyScope = useKeyScope();
   const choices = useLaunchChoices(props);
   const launch = useLaunchAgent();
   const viewerId = catalog.data?.viewer.id ?? null;
@@ -313,6 +315,7 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
         prompt,
         patch,
         started,
+        keyScope,
       },
       {
         onSuccess: ({ agentId, warning }) => {
@@ -337,6 +340,7 @@ function LaunchForm(props: LaunchProps & { settings: LinearSettings }) {
     action,
     issue,
     prompt,
+    keyScope,
     queries,
     toast,
     onClose,

@@ -3,6 +3,8 @@ import {
   type IssueDetail,
   type IssuePatch,
   type IssueQuery,
+  type IssueRef,
+  type IssueSort,
   type IssueSummary,
   LINEAR_IDENTIFIER,
   STATUS_STATE_TYPES,
@@ -14,6 +16,7 @@ import { LinearApiError } from "./graphql";
 
 const USER_FIELDS = "id name displayName avatarUrl";
 const STATE_FIELDS = "id name type color position";
+const REF_FIELDS = "id identifier title";
 const SUMMARY_FIELDS = `
   id identifier title url branchName priority priorityLabel updatedAt
   state { ${STATE_FIELDS} }
@@ -21,7 +24,23 @@ const SUMMARY_FIELDS = `
   team { id key name }
   project { id name }
   labels(first: 20) { nodes { id name color } }
+  parent { ${REF_FIELDS} }
 `;
+
+// Breadcrumbs show this many parent levels. Deeper chains start at the highest fetched level.
+export const ANCESTOR_DEPTH = 6;
+const ANCESTOR_FIELDS = Array.from({ length: ANCESTOR_DEPTH }).reduce<string>(
+  (inner) => `parent { ${REF_FIELDS} ${inner} }`,
+  "",
+);
+
+export const ISSUE_SORT_INPUT: Record<IssueSort, Record<string, unknown>[]> = {
+  updated: [{ updatedAt: { order: "Descending" } }],
+  created: [{ createdAt: { order: "Descending" } }],
+  priority: [{ priority: { order: "Descending" } }, { updatedAt: { order: "Descending" } }],
+  due: [{ dueDate: { order: "Ascending", nulls: "last" } }, { updatedAt: { order: "Descending" } }],
+  title: [{ title: { order: "Ascending" } }],
+};
 
 // Linear caps query complexity (connection sizes multiply), so the catalog asks only for
 // what the UI uses: teams with their workflow states, and active users.
@@ -40,8 +59,8 @@ export const CATALOG_QUERY = `
 `;
 
 export const LIST_QUERY = `
-  query PaseoLinearIssueList($filter: IssueFilter, $after: String) {
-    issues(first: 50, after: $after, filter: $filter, orderBy: updatedAt) {
+  query PaseoLinearIssueList($filter: IssueFilter, $after: String, $sort: [IssueSortInput!]) {
+    issues(first: 50, after: $after, filter: $filter, sort: $sort) {
       nodes { ${SUMMARY_FIELDS} }
       pageInfo { hasNextPage endCursor }
     }
@@ -54,7 +73,7 @@ export const DETAIL_QUERY = `
       ${SUMMARY_FIELDS}
       description createdAt
       creator { ${USER_FIELDS} }
-      parent { id identifier title }
+      ancestors: ${ANCESTOR_FIELDS}
       children(first: 50) { nodes { id identifier title state { ${STATE_FIELDS} } } }
       comments(first: 100) { nodes { id body createdAt user { ${USER_FIELDS} } } }
       attachments(first: 25) { nodes { id title subtitle url sourceType } }
@@ -83,6 +102,11 @@ export const COMMENT_MUTATION = `
 const nodes = <T extends z.ZodType>(schema: T) =>
   z.object({ nodes: z.array(schema) }).transform((connection) => connection.nodes);
 const LabelRaw = z.object({ id: z.string(), name: z.string(), color: z.string() });
+const RefRaw = z.object({ id: z.string(), identifier: z.string(), title: z.string() });
+type RawAncestor = IssueRef & { parent?: RawAncestor | null };
+const RawAncestorSchema: z.ZodType<RawAncestor> = z.lazy(() =>
+  RefRaw.extend({ parent: RawAncestorSchema.nullable().optional() }),
+);
 const RawSummary = z.object({
   id: z.string(),
   identifier: z.string(),
@@ -97,6 +121,7 @@ const RawSummary = z.object({
   team: z.object({ id: z.string(), key: z.string(), name: z.string() }),
   project: z.object({ id: z.string(), name: z.string() }).nullable(),
   labels: nodes(LabelRaw),
+  parent: RefRaw.nullable(),
 });
 const RawComment = z.object({
   id: z.string(),
@@ -108,7 +133,7 @@ const RawDetail = RawSummary.extend({
   description: z.string().nullable(),
   createdAt: z.string(),
   creator: UserSchema.nullable(),
-  parent: z.object({ id: z.string(), identifier: z.string(), title: z.string() }).nullable(),
+  ancestors: RawAncestorSchema.nullable(),
   children: nodes(
     z.object({
       id: z.string(),
@@ -165,6 +190,17 @@ export function issueFilter(query: IssueQuery): Record<string, unknown> | null {
   return clauses.length > 0 ? { and: clauses } : null;
 }
 
+/** Flattens the nested parent chain into root-first order. Stops at a repeated issue. */
+export function flattenAncestors(chain: RawAncestor | null | undefined): IssueRef[] {
+  const ancestors: IssueRef[] = [];
+  const seen = new Set<string>();
+  for (let node = chain; node && !seen.has(node.id); node = node.parent) {
+    seen.add(node.id);
+    ancestors.unshift({ id: node.id, identifier: node.identifier, title: node.title });
+  }
+  return ancestors;
+}
+
 function sortStates<T extends { states: { position: number }[] }>(team: T): T {
   return { ...team, states: [...team.states].sort((a, b) => a.position - b.position) };
 }
@@ -178,7 +214,7 @@ export function createLinearService(graphql: LinearGraphql) {
     const comments = [...data.issue.comments].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
-    return { ...data.issue, comments };
+    return { ...data.issue, ancestors: flattenAncestors(data.issue.ancestors), comments };
   }
 
   function requireIssue(payload: z.infer<typeof IssuePayload>, action: string): IssueSummary {
@@ -198,7 +234,11 @@ export function createLinearService(graphql: LinearGraphql) {
         if (issue) return { issues: [issue], endCursor: null, hasNextPage: false };
       }
       const data = ListResponse.parse(
-        await graphql(LIST_QUERY, { filter: issueFilter(query), after: query.after }),
+        await graphql(LIST_QUERY, {
+          filter: issueFilter(query),
+          after: query.after,
+          sort: ISSUE_SORT_INPUT[query.sort ?? "updated"],
+        }),
       );
       return {
         issues: data.issues.nodes,

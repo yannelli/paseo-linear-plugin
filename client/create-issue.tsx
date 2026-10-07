@@ -13,6 +13,7 @@ import {
   stateOptions,
   UNASSIGNED,
 } from "./pickers";
+import { useKeyScope } from "./key-scope";
 import { queryKeys } from "./queries";
 import {
   Avatar,
@@ -79,6 +80,7 @@ export function CreateIssueModal(props: CreateIssueProps) {
   const toast = useToast();
   const queries = useQueryClient();
   const createIssue = useRpc(createIssueRpc);
+  const scope = useKeyScope();
   const [draft, setDraft] = useState<Draft>(() => ({
     teamId: props.defaultTeamId ?? props.teams[0]?.id ?? null,
     stateId: null,
@@ -100,10 +102,11 @@ export function CreateIssueModal(props: CreateIssueProps) {
         priority: draft.priority,
         assigneeId: draft.assigneeId,
         ...(draft.stateId ? { stateId: draft.stateId } : {}),
+        projectId: scope,
       });
     },
     onSuccess: ({ issue }) => {
-      void queries.invalidateQueries({ queryKey: queryKeys.issues });
+      void queries.invalidateQueries({ queryKey: queryKeys.issues(scope) });
       toast.show(`Created ${issue.identifier}`, { variant: "success" });
       onCreated(issue.id);
     },

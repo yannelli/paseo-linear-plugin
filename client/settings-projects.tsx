@@ -20,6 +20,7 @@ import {
   type PromptMode,
   upsertProject,
 } from "../shared/settings";
+import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
 import { type PaseoProjectOption, useAuthStatus, useCatalog, useProjects } from "./queries";
 import {
   MultilineField,
@@ -160,7 +161,21 @@ function ProjectEditor({ theme, settings }: { theme: Theme; settings: ReadySetti
 
 function TeamsSection({ config, change }: { config: ProjectConfig; change: Change }) {
   const auth = useAuthStatus();
-  const catalog = useCatalog(auth.data?.configured === true);
+  const scope = effectiveKeyScope(config.projectId, auth.data?.projectKeys);
+  return (
+    <KeyScopeProvider key={scope ?? "default"} projectId={scope}>
+      <TeamSwitches
+        config={config}
+        change={change}
+        enabled={scope !== null || auth.data?.configured === true}
+      />
+    </KeyScopeProvider>
+  );
+}
+
+function TeamSwitches(props: { config: ProjectConfig; change: Change; enabled: boolean }) {
+  const { config, change } = props;
+  const catalog = useCatalog(props.enabled);
   return (
     <SettingsSection title="Linear teams">
       <SettingsCard>

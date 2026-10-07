@@ -13,6 +13,7 @@ import { Text, View } from "react-native";
 import { authClearRpc } from "../shared/linear";
 import { ApiKeyForm, LINEAR_KEY_SETTINGS_URL } from "./connect";
 import { useAuthStatus, useCatalog } from "./queries";
+import { ProjectKeysSection } from "./settings-keys";
 import { errorMessage, type Theme } from "./ui";
 
 type AuthQuery = ReturnType<typeof useAuthStatus>;
@@ -21,7 +22,7 @@ type CatalogQuery = ReturnType<typeof useCatalog>;
 function statusText(auth: AuthQuery): string {
   const status = auth.data;
   if (!status) return auth.isError ? errorMessage(auth.error) : "Checking…";
-  if (!status.configured) return "Not connected";
+  if (!status.configured) return "No default key";
   if (status.source === "environment") {
     return `Using the key from the daemon environment (${status.keyHint ?? ""})`;
   }
@@ -62,7 +63,7 @@ export function ConnectionSettings({ theme }: PluginSurfaceProps) {
       queries.removeQueries({ queryKey: ["linear"] });
       const message = configured
         ? "Saved key removed. The daemon environment still provides a key."
-        : "Linear disconnected";
+        : "Default key removed";
       toast.show(message, { variant: "success" });
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -89,7 +90,7 @@ export function ConnectionSettings({ theme }: PluginSurfaceProps) {
           ) : null}
         </SettingsCard>
       </SettingsSection>
-      <SettingsSection title={configured ? "Replace API key" : "Connect"}>
+      <SettingsSection title={configured ? "Replace the default key" : "Default key"}>
         <SettingsCard>
           <SettingsRow
             label="Personal API key"
@@ -102,6 +103,7 @@ export function ConnectionSettings({ theme }: PluginSurfaceProps) {
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
+      <ProjectKeysSection theme={theme} />
     </View>
   );
 }

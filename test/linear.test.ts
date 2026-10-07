@@ -162,6 +162,7 @@ const detail: IssueDetail = {
   createdAt: "2026-09-01T00:00:00.000Z",
   creator: null,
   parent: null,
+  ancestors: [],
   children: [],
   comments: [
     {
@@ -283,6 +284,7 @@ describe("issue filters", () => {
       return {
         issue: {
           ...detail,
+          ancestors: null,
           labels: { nodes: [] },
           children: { nodes: [] },
           comments: { nodes: [] },
@@ -339,7 +341,10 @@ describe("credential store", () => {
       expect(await store.resolve()).toEqual({ apiKey: "lin_api_env", source: "environment" });
       await store.save(" lin_api_saved ");
       expect(await store.resolve()).toEqual({ apiKey: "lin_api_saved", source: "file" });
-      expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ apiKey: "lin_api_saved" });
+      expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
+        apiKey: "lin_api_saved",
+        projects: {},
+      });
       if (process.platform !== "win32") expect((await stat(file)).mode & 0o777).toBe(0o600);
       await store.clear();
       expect(await store.resolve()).toEqual({ apiKey: "lin_api_env", source: "environment" });
