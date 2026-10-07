@@ -2,13 +2,13 @@
 
 Created: 2026-10-07. Last updated: 2026-10-07.
 
-The **Release** workflow publishes `@yannelli/paseo-linear-plugin` to npm after the GitHub release step. Paseo 0.9.0 and newer install it with:
+The **Release** workflow publishes `@yannelli/paseo-linear-plugin` to npm after the GitHub release step. Paseo 0.10.0 and newer install it with:
 
 ```sh
 paseo plugin add npm:@yannelli/paseo-linear-plugin
 ```
 
-Paseo runs `npm install --omit=dev --ignore-scripts` on the daemon host and compiles `index.client.ts` and `index.server.ts` itself. The tarball holds TypeScript source only, as listed in `files` in `package.json`. Paseo resolves plugin modules only under `client/`, `server/`, and `shared/`. After you add a top-level file, run `npm pack --dry-run` to check the file list.
+Paseo runs `npm install --omit=dev --ignore-scripts` on the daemon host and compiles `index.client.tsx` and `index.server.ts` itself. The tarball holds TypeScript source only, as listed in `files` in `package.json`. Paseo resolves plugin modules only under `client/`, `server/`, and `shared/`. After you add a top-level file, run `npm pack --dry-run` to check the file list.
 
 ## Workflow step
 

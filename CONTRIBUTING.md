@@ -4,7 +4,7 @@ Thanks for helping with Linear issues for Paseo. Bug reports, ideas, docs fixes,
 
 ## Quick start
 
-You need Node.js 24 (see `.nvmrc`). To try the plugin in Paseo, you also need Paseo 0.9.0 or newer and a Linear personal API key.
+You need Node.js 24 (see `.nvmrc`). To try the plugin in Paseo, you also need Paseo 0.10.0 or newer and a Linear personal API key.
 
 ```sh
 git clone https://github.com/yannelli/paseo-linear-plugin.git
@@ -18,7 +18,7 @@ npm run check
 | Command | What it does |
 | --- | --- |
 | `npm run typecheck` | Type checks all TypeScript |
-| `npm test` | Runs the Linear client tests and the release script tests |
+| `npm test` | Runs the plugin tests (Linear client, key file, cache, handlers, sub-issue nesting, Markdown, agent options) and the release script tests |
 
 The tests use a local GraphQL server. They do not call Linear and do not need an API key.
 
@@ -46,10 +46,11 @@ If you already installed the npm release, remove it first with `paseo plugin rem
 
 | Path | Runs in | Contents |
 | --- | --- | --- |
-| `shared/` | App and daemon | RPC contract and attachment source definition |
-| `server/` | Daemon only | Linear GraphQL client and the RPC handler |
-| `index.client.ts` | App | Registers the attachment source |
-| `index.server.ts` | Daemon | Registers the RPC handler |
+| `client/` | App | Linear screen and panel, issue views, agent setup page, and settings screens |
+| `shared/` | App and daemon | RPC contracts, settings schema, prompt templates, Markdown parser, and the attachment source |
+| `server/` | Daemon only | Linear GraphQL client, key file, response cache, and RPC handlers |
+| `index.client.tsx` | App | Registers the screen, the panel, the settings screens, the commands, the timeline card, and the attachment source |
+| `index.server.ts` | Daemon | Registers the settings and the RPC handlers |
 | `test/` | Node.js | Tests (not published) |
 | `scripts/` | GitHub Actions | Release scripts (not published) |
 | `docs/graphics/` | Your machine | Source for the README images |
@@ -60,7 +61,7 @@ Keep these rules when you change code:
 - `shared/` imports only shared code: no Node.js, React, or `server/` modules.
 - Paseo resolves plugin modules only under `client/`, `server/`, and `shared/`. Do not add other module folders at the root.
 - Paseo supplies `@getpaseo/plugin`, `zod`, and React at runtime, so they stay in `devDependencies`. Ask in an issue before you add a runtime dependency.
-- Do not add keys to `paseo-plugin.json` without checking the oldest supported Paseo version. Paseo 0.9 and 0.10 reject unknown keys.
+- Do not add keys to `paseo-plugin.json` without checking the oldest supported Paseo version. Paseo 0.10 rejects unknown keys.
 
 ## Make a change
 

@@ -1,4 +1,4 @@
-// Renders the README banners, the GitHub social preview, and the icon from scene.html.
+// Renders the README images, the GitHub social preview, and the icon from scene.html.
 // Usage: node docs/graphics/render.mjs [out-dir]   (defaults to docs/images)
 // Needs Playwright with Chromium. Set PLAYWRIGHT_MODULE to its entry file when it is not resolvable.
 import assert from "node:assert/strict";
@@ -27,9 +27,9 @@ const outDir = resolve(process.argv[2] ?? join(root, "..", "images"));
 const MAX_BYTES = 900 * 1024;
 const outputs = [
   { scene: "social", file: "social-preview.png" },
-  { scene: "search", file: "search.png" },
-  { scene: "attach", file: "attach.png" },
-  { scene: "setup", file: "setup.png" },
+  { scene: "browse", file: "browse.png" },
+  { scene: "launch", file: "launch.png" },
+  { scene: "keys", file: "keys.png" },
   { scene: "icon", file: "icon.png", transparent: true },
 ];
 
@@ -49,7 +49,7 @@ try {
     await tab.goto(pathToFileURL(join(root, "scene.html")).href);
     const layout = await tab.evaluate((name) => window.renderScene(name), scene);
     assert.equal(layout.fonts, true, `${scene}: fonts did not load`);
-    assert.equal(layout.overflow, false, `${scene}: content leaves the frame`);
+    assert.deepEqual(layout.problems, [], `${scene}: layout problems`);
     await tab.setViewportSize({ width: layout.width, height: layout.height });
     const output = join(outDir, file);
     await tab.screenshot({ path: output, omitBackground: Boolean(transparent) });
