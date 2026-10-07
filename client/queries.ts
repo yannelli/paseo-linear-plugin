@@ -40,7 +40,11 @@ export const queryKeys = {
 };
 
 // Stale-while-revalidate: the daemon's last response shows while the Linear request runs.
-function useSaved<T>(key: readonly unknown[], read: () => Promise<{ value: T | null }>, enabled: boolean) {
+function useSaved<T>(
+  key: readonly unknown[],
+  read: () => Promise<{ value: T | null }>,
+  enabled: boolean,
+) {
   const queries = useQueryClient();
   const fresh = queries.getQueryState(key)?.data !== undefined;
   const saved = useQuery({

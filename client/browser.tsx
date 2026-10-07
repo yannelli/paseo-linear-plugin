@@ -103,7 +103,9 @@ function useKeyOptions(enabled: boolean, projectKeys: ProjectKeys) {
   const projects = useProjects();
   return useMemo(() => {
     if (!enabled || projectKeys.length === 0) return [];
-    const names = new Map(projects.data?.map((project) => [project.projectId, project.displayName]));
+    const names = new Map(
+      projects.data?.map((project) => [project.projectId, project.displayName]),
+    );
     return [
       { value: "", label: "Default key" },
       ...projectKeys.map((entry) => ({
@@ -153,7 +155,8 @@ function ConnectedBrowser(props: BrowserProps & { catalog: Catalog; projectKeys:
   const closeCreate = useCallback(() => update({ creating: false }), [update]);
   const created = useCallback((issueId: string) => update({ creating: false, issueId }), [update]);
   const openLaunch = useCallback(
-    (action: AgentAction) => state.issueId && update({ launch: { issueId: state.issueId, action } }),
+    (action: AgentAction) =>
+      state.issueId && update({ launch: { issueId: state.issueId, action } }),
     [update, state.issueId],
   );
   const closeLaunch = useCallback(() => update({ launch: null }), [update]);

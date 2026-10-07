@@ -17,16 +17,18 @@ import { useLinkedAgents, useProjects, useProviders } from "./queries";
 // `useWorkspace` works only inside a workspace panel, so look the workspace up by id instead.
 function useWorkspaceById(workspaceId: string | null) {
   const paseo = usePaseo();
-  return useQuery({
-    queryKey: ["linear", "workspace", workspaceId],
-    enabled: workspaceId !== null,
-    staleTime: 60_000,
-    queryFn: async (): Promise<TargetWorkspace | null> => {
-      const { entries } = await paseo.workspaces.list();
-      const match = entries.find((entry) => entry.id === workspaceId);
-      return match ? { id: match.id, projectId: match.projectId, name: match.name } : null;
-    },
-  }).data ?? null;
+  return (
+    useQuery({
+      queryKey: ["linear", "workspace", workspaceId],
+      enabled: workspaceId !== null,
+      staleTime: 60_000,
+      queryFn: async (): Promise<TargetWorkspace | null> => {
+        const { entries } = await paseo.workspaces.list();
+        const match = entries.find((entry) => entry.id === workspaceId);
+        return match ? { id: match.id, projectId: match.projectId, name: match.name } : null;
+      },
+    }).data ?? null
+  );
 }
 
 const NO_PICKS: AgentPicks = { agent: null, model: null, effort: null, mode: null };

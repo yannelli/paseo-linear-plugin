@@ -29,7 +29,10 @@ export interface RowOptions {
 
 // Groups issues by workflow state and keeps the server's order in each group. When nested, a
 // sub-issue shows under its parent if the parent is in the list, whatever its own state is.
-export function buildIssueRows(issues: readonly IssueSummary[], options: RowOptions): IssueListRow[] {
+export function buildIssueRows(
+  issues: readonly IssueSummary[],
+  options: RowOptions,
+): IssueListRow[] {
   const children = new Map<string, IssueSummary[]>();
   let roots: readonly IssueSummary[] = issues;
   if (options.nested) {

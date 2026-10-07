@@ -29,7 +29,11 @@ export const TeamSchema = z.object({
   states: z.array(WorkflowStateSchema),
 });
 
-export const IssueRefSchema = z.object({ id: z.string(), identifier: z.string(), title: z.string() });
+export const IssueRefSchema = z.object({
+  id: z.string(),
+  identifier: z.string(),
+  title: z.string(),
+});
 
 export const IssueSummarySchema = z.object({
   id: z.string(),

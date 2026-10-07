@@ -33,10 +33,13 @@ describe("agent choices", () => {
     const agents = agentChoices(full);
     expect(agents.map((agent) => agent.id)).toEqual(["claude"]);
     expect(agents[0]?.models.map((model) => model.id)).toEqual(["opus", "sonnet"]);
-    expect(agents[0]?.models[0]).toMatchObject({ defaultEffortId: "low", efforts: [
-      { id: "low", label: "Low" },
-      { id: "high", label: "High" },
-    ] });
+    expect(agents[0]?.models[0]).toMatchObject({
+      defaultEffortId: "low",
+      efforts: [
+        { id: "low", label: "Low" },
+        { id: "high", label: "High" },
+      ],
+    });
     expect(agents[0]?.models[1]).toMatchObject({ efforts: [], defaultEffortId: null });
   });
 

@@ -4,7 +4,9 @@ import { createContext, type ReactNode, useContext } from "react";
 const KeyScopeContext = createContext<string | null>(null);
 
 export function KeyScopeProvider(props: { projectId: string | null; children: ReactNode }) {
-  return <KeyScopeContext.Provider value={props.projectId}>{props.children}</KeyScopeContext.Provider>;
+  return (
+    <KeyScopeContext.Provider value={props.projectId}>{props.children}</KeyScopeContext.Provider>
+  );
 }
 
 export function useKeyScope(): string | null {

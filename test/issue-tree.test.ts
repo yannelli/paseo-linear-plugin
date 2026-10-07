@@ -26,7 +26,9 @@ function issue(id: string, parent: string | null, state = todo): IssueSummary {
 
 const shape = (rows: ReturnType<typeof buildIssueRows>) =>
   rows.map((row) =>
-    row.kind === "header" ? `# ${row.state.name} ${row.count}` : `${"  ".repeat(row.depth)}${row.issue.id}`,
+    row.kind === "header"
+      ? `# ${row.state.name} ${row.count}`
+      : `${"  ".repeat(row.depth)}${row.issue.id}`,
   );
 
 describe("issue tree", () => {

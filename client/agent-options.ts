@@ -63,7 +63,8 @@ export function agentChoices(snapshot: ProviderSnapshot): AgentChoice[] {
       models: (entry.models ?? [])
         .filter((model) => model.isSelectable !== false)
         .map((model) => {
-          const set = model.thinkingSet === undefined ? null : compact?.thinkingSets[model.thinkingSet];
+          const set =
+            model.thinkingSet === undefined ? null : compact?.thinkingSets[model.thinkingSet];
           const options = set?.options ?? model.thinkingOptions ?? [];
           const fallback = options.find((option) => option.isDefault)?.id ?? null;
           return {

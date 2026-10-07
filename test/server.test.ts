@@ -9,12 +9,7 @@ import { createResponseCache } from "../server/cache";
 import { createCredentialStore } from "../server/credentials";
 import { registerHandlers } from "../server/handlers";
 import { createLinearService, flattenAncestors, ISSUE_SORT_INPUT } from "../server/queries";
-import {
-  authStatusRpc,
-  cachedIssuesRpc,
-  listIssuesRpc,
-  updateIssueRpc,
-} from "../shared/linear";
+import { authStatusRpc, cachedIssuesRpc, listIssuesRpc, updateIssueRpc } from "../shared/linear";
 
 let directory = "";
 beforeEach(async () => {
@@ -61,13 +56,23 @@ describe("Linear queries", () => {
   it("flattens the parent chain root first and stops at a cycle", () => {
     const root = { id: "1", identifier: "ENG-1", title: "Root" };
     const middle = { id: "2", identifier: "ENG-2", title: "Middle", parent: root };
-    expect(flattenAncestors({ id: "3", identifier: "ENG-3", title: "Parent", parent: middle }))
-      .toEqual([root, { id: "2", identifier: "ENG-2", title: "Middle" }, {
+    expect(
+      flattenAncestors({ id: "3", identifier: "ENG-3", title: "Parent", parent: middle }),
+    ).toEqual([
+      root,
+      { id: "2", identifier: "ENG-2", title: "Middle" },
+      {
         id: "3",
         identifier: "ENG-3",
         title: "Parent",
-      }]);
-    const loop = { id: "1", identifier: "ENG-1", title: "A", parent: { id: "1", identifier: "ENG-1", title: "A" } };
+      },
+    ]);
+    const loop = {
+      id: "1",
+      identifier: "ENG-1",
+      title: "A",
+      parent: { id: "1", identifier: "ENG-1", title: "A" },
+    };
     expect(flattenAncestors(loop)).toHaveLength(1);
     expect(flattenAncestors(null)).toEqual([]);
   });
@@ -78,7 +83,13 @@ describe("Linear queries", () => {
       sent.push(variables?.sort);
       return { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } };
     });
-    const base = { teamId: null, assignee: "anyone", status: "all", query: "", after: null } as const;
+    const base = {
+      teamId: null,
+      assignee: "anyone",
+      status: "all",
+      query: "",
+      after: null,
+    } as const;
     await service.listIssues({ ...base, sort: "priority" });
     await service.listIssues(base);
     expect(sent).toEqual([ISSUE_SORT_INPUT.priority, ISSUE_SORT_INPUT.updated]);

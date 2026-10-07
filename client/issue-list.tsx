@@ -7,13 +7,7 @@ import { buildIssueRows, type IssueListRow, toggleCollapsed } from "./issue-tree
 import { PickerModal } from "./pickers";
 import { useIssues } from "./queries";
 import type { BrowserState } from "./store";
-import {
-  Button,
-  EmptyState,
-  errorMessage,
-  Segmented,
-  type Theme,
-} from "./ui";
+import { Button, EmptyState, errorMessage, Segmented, type Theme } from "./ui";
 
 const ASSIGNEE_OPTIONS: readonly { value: AssigneeFilter; label: string }[] = [
   { value: "me", label: "Mine" },

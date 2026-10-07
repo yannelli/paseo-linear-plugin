@@ -5,7 +5,12 @@ import { useCallback, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
 import type { IssueDetail } from "../shared/linear";
 import { ACTION_LABELS, composePrompt } from "../shared/prompts";
-import { AGENT_ACTIONS, type AgentAction, type LinearSettings, linearSettings } from "../shared/settings";
+import {
+  AGENT_ACTIONS,
+  type AgentAction,
+  type LinearSettings,
+  linearSettings,
+} from "../shared/settings";
 import { useKeyScope } from "./key-scope";
 import { type LaunchChoices, useLaunchChoices } from "./launch-choices";
 import { Chip, Field, Toggle } from "./launch-fields";
@@ -76,21 +81,30 @@ function pickerConfig(kind: PickerKind, choices: LaunchChoices, action: AgentAct
         title: "Model",
         icon: "Cpu",
         value: agent?.model.id ?? null,
-        options: (agent?.agent.models ?? []).map((entry) => ({ value: entry.id, label: entry.label })),
+        options: (agent?.agent.models ?? []).map((entry) => ({
+          value: entry.id,
+          label: entry.label,
+        })),
       };
     case "effort":
       return {
         title: "Effort",
         icon: "Gauge",
         value: agent?.effort?.id ?? null,
-        options: (agent?.model.efforts ?? []).map((entry) => ({ value: entry.id, label: entry.label })),
+        options: (agent?.model.efforts ?? []).map((entry) => ({
+          value: entry.id,
+          label: entry.label,
+        })),
       };
     case "mode":
       return {
         title: "Mode",
         icon: "Shield",
         value: agent?.mode?.id ?? null,
-        options: (agent?.agent.modes ?? []).map((entry) => ({ value: entry.id, label: entry.label })),
+        options: (agent?.agent.modes ?? []).map((entry) => ({
+          value: entry.id,
+          label: entry.label,
+        })),
       };
     case "project":
       return {
@@ -320,7 +334,12 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
               <Chip theme={theme} label="Model" value={agent.model.label} onPress={open("model")} />
             ) : null}
             {agent?.effort ? (
-              <Chip theme={theme} label="Effort" value={agent.effort.label} onPress={open("effort")} />
+              <Chip
+                theme={theme}
+                label="Effort"
+                value={agent.effort.label}
+                onPress={open("effort")}
+              />
             ) : null}
             {agent?.mode ? (
               <Chip theme={theme} label="Mode" value={agent.mode.label} onPress={open("mode")} />
@@ -350,7 +369,10 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
             theme={theme}
             label="Project"
             icon="FolderGit2"
-            value={choices.project?.displayName ?? (choices.projects.isPending ? "Loading…" : "Choose a project")}
+            value={
+              choices.project?.displayName ??
+              (choices.projects.isPending ? "Loading…" : "Choose a project")
+            }
             onPress={open("project")}
           />
           <Field
@@ -379,7 +401,12 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
             />
           ) : null}
           {canAssign ? (
-            <Toggle theme={theme} label="Assign the issue to me" value={assignToMe} onChange={setAssignToMe} />
+            <Toggle
+              theme={theme}
+              label="Assign the issue to me"
+              value={assignToMe}
+              onChange={setAssignToMe}
+            />
           ) : null}
         </View>
         {launch.error ? (
