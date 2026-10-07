@@ -6,6 +6,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useMemo } from "react";
 import {
   authStatusRpc,
   cachedCatalogRpc,
@@ -126,6 +127,36 @@ export function useUpdateIssue(issueId: string) {
       void queries.invalidateQueries({ queryKey: queryKeys.issues(scope) });
     },
   });
+}
+
+// Plain RPC calls, not a mutation, so a save that finishes after the view closes still
+// updates the cache. The update returns a summary without the description, so callers
+// show the new text with `show` and the save leaves the cached description alone.
+export function useDescriptionSaver(issueId: string) {
+  const scope = useKeyScope();
+  const update = useRpc(updateIssueRpc);
+  const queries = useQueryClient();
+  return useMemo(() => {
+    const key = queryKeys.issue(scope, issueId);
+    return {
+      show(description: string) {
+        void queries.cancelQueries({ queryKey: key });
+        queries.setQueryData<IssueDetail>(key, (current) =>
+          current ? { ...current, description } : current,
+        );
+      },
+      async save(description: string) {
+        const { issue } = await update({ id: issueId, patch: { description }, projectId: scope });
+        queries.setQueryData<IssueDetail>(key, (current) =>
+          current ? { ...current, ...issue } : current,
+        );
+        void queries.invalidateQueries({ queryKey: queryKeys.issues(scope) });
+      },
+      reload() {
+        void queries.invalidateQueries({ queryKey: key });
+      },
+    };
+  }, [scope, issueId, update, queries]);
 }
 
 export function useAddComment(issueId: string) {

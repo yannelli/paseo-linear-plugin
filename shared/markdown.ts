@@ -414,3 +414,48 @@ function readBareUrl(text: string, i: number): Token | null {
   if (!safe) return null;
   return { nodes: [{ type: "link", url: safe, children: label }], end: i + url.length };
 }
+
+/** Task items in document order. Renderers number checkboxes with this walk. */
+export function taskItems(blocks: MarkdownBlock[]): MarkdownListItem[] {
+  const out: MarkdownListItem[] = [];
+  const walk = (children: MarkdownBlock[]) => {
+    for (const block of children) {
+      if (block.type === "blockquote") walk(block.children);
+      if (block.type !== "list") continue;
+      for (const item of block.items) {
+        if (item.checked !== null) out.push(item);
+        walk(item.children);
+      }
+    }
+  };
+  walk(blocks);
+  return out;
+}
+
+// A "[ ]" or "[x]" after any quote and list markers. The parser has the final word.
+const TASK_LINE = /^((?:[ \t]*(?:>[ \t]?|(?:[-*+]|\d{1,9}[.)])[ \t]+))+)\[[ xX]\](?=[ \t]|$)/;
+
+const taskStates = (source: string) => taskItems(parseMarkdown(source)).map((item) => item.checked);
+
+// Flips task `ordinal` (0-based, `taskItems` order) by changing only its box character.
+// Returns null when no line maps to that task, so callers never save a guess.
+export function toggleTask(source: string, ordinal: number): string | null {
+  const before = taskStates(source);
+  if (!Number.isInteger(ordinal) || ordinal < 0 || ordinal >= before.length) return null;
+  const parts = source.split(/(\r\n?|\n)/);
+  let offset = 0;
+  let candidate = 0;
+  for (let k = 0; k < parts.length; k += 2) {
+    const match = TASK_LINE.exec(parts[k]);
+    // Every task is a candidate and both run in document order, so earlier ones can't match.
+    if (match && candidate++ >= ordinal) {
+      const at = offset + match[1].length + 1;
+      const next = `${source.slice(0, at)}${source[at] === " " ? "x" : " "}${source.slice(at + 1)}`;
+      const after = taskStates(next);
+      const flipsOnly = (state: boolean | null, n: number) => (n === ordinal) !== (state === before[n]);
+      if (after.length === before.length && after.every(flipsOnly)) return next;
+    }
+    offset += parts[k].length + (parts[k + 1]?.length ?? 0);
+  }
+  return null;
+}

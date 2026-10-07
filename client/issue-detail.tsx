@@ -6,7 +6,7 @@ import type { IssueDetail, IssuePatch, LinearTeam, LinearUser } from "../shared/
 import { ACTION_LABELS } from "../shared/prompts";
 import type { AgentAction } from "../shared/settings";
 import { IssueBreadcrumbs } from "./breadcrumbs";
-import { Markdown } from "./markdown";
+import { IssueDescription } from "./issue-description";
 import { Comments, IssueLinks, IssueRelations, LinkedAgents } from "./issue-sections";
 import type { LaunchTarget } from "./launch";
 import {
@@ -27,7 +27,6 @@ import {
   LabelPill,
   priorityMeta,
   PriorityIcon,
-  SectionLabel,
   StateIcon,
   type Theme,
 } from "./ui";
@@ -90,7 +89,8 @@ export function IssueDetailView(props: IssueDetailProps) {
       </EmptyState>
     );
   }
-  return <LoadedIssue {...props} issue={issue.data} refetch={reload} />;
+  // Keyed so that switching issues never carries a draft or a pending save across.
+  return <LoadedIssue key={issue.data.id} {...props} issue={issue.data} refetch={reload} />;
 }
 
 function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): void }) {
@@ -108,7 +108,6 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
         fontWeight: "500",
         lineHeight: compact ? 24 : 28,
       },
-      description: { color: colors.foregroundMuted, fontSize: 14, lineHeight: 21 },
     } as const;
   }, [colors, compact]);
   return (
@@ -140,14 +139,7 @@ function LoadedIssue(props: IssueDetailProps & { issue: IssueDetail; refetch(): 
         ) : null}
         <LaunchButtons theme={theme} onLaunch={props.onLaunch} />
         <LinkedAgents theme={theme} identifier={issue.identifier} navigation={props.navigation} />
-        <View>
-          <SectionLabel theme={theme}>Description</SectionLabel>
-          {issue.description?.trim() ? (
-            <Markdown theme={theme} compact={compact} source={issue.description} />
-          ) : (
-            <Text style={styles.description}>No description.</Text>
-          )}
-        </View>
+        <IssueDescription theme={theme} compact={compact} issue={issue} />
         <IssueRelations theme={theme} issue={issue} onOpenIssue={props.onOpenIssue} />
         <IssueLinks theme={theme} issue={issue} />
         <Comments theme={theme} issue={issue} />
