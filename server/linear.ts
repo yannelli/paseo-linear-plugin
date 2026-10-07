@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { createLinearGraphql, type LinearGraphqlOptions } from "./graphql";
 
 const LinearIssueSchema = z.object({
   id: z.string(),
@@ -13,17 +14,9 @@ const LinearIssueSchema = z.object({
   labels: z.object({ nodes: z.array(z.object({ name: z.string() })) }),
 });
 
-const LinearGraphqlErrorSchema = z.object({ message: z.string() }).passthrough();
-const ExactIssueResponseSchema = z.object({
-  data: z.object({ issue: LinearIssueSchema.nullable() }).nullable().optional(),
-  errors: z.array(LinearGraphqlErrorSchema).optional(),
-});
+const ExactIssueResponseSchema = z.object({ issue: LinearIssueSchema.nullable() });
 const IssueSearchResponseSchema = z.object({
-  data: z
-    .object({ issues: z.object({ nodes: z.array(LinearIssueSchema) }) })
-    .nullable()
-    .optional(),
-  errors: z.array(LinearGraphqlErrorSchema).optional(),
+  issues: z.object({ nodes: z.array(LinearIssueSchema) }),
 });
 
 const ISSUE_FIELDS = `
@@ -39,13 +32,13 @@ const ISSUE_FIELDS = `
   labels { nodes { name } }
 `;
 
-const EXACT_ISSUE_QUERY = `
+export const EXACT_ISSUE_QUERY = `
   query PaseoLinearIssue($id: String!) {
     issue(id: $id) { ${ISSUE_FIELDS} }
   }
 `;
 
-const SEARCH_ISSUES_QUERY = `
+export const SEARCH_ISSUES_QUERY = `
   query PaseoLinearIssues($filter: IssueFilter) {
     issues(first: 20, filter: $filter, orderBy: updatedAt) {
       nodes { ${ISSUE_FIELDS} }
@@ -69,23 +62,7 @@ export interface LinearIssueSearch {
   search(query: string): Promise<{ items: LinearAttachmentItem[] }>;
 }
 
-interface LinearIssueSearchOptions {
-  apiKey: string;
-  endpoint?: string;
-  request?: typeof fetch;
-}
-
-interface GraphqlRequest {
-  query: string;
-  variables: Record<string, unknown>;
-}
-
-class LinearApiError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "LinearApiError";
-  }
-}
+type LinearIssueSearchOptions = LinearGraphqlOptions;
 
 function issueSubtitle(issue: z.infer<typeof LinearIssueSchema>): string | undefined {
   const parts = [issue.state.name, issue.assignee?.name].filter(
@@ -122,52 +99,22 @@ function toAttachmentItem(issue: z.infer<typeof LinearIssueSchema>): LinearAttac
   };
 }
 
-function describeHttpFailure(status: number): string {
-  if (status === 401 || status === 403) return "Linear rejected LINEAR_API_KEY";
-  if (status === 429) return "Linear rate limit reached. Try again shortly";
-  return `Linear API request failed with HTTP ${status}`;
-}
-
-function throwGraphqlErrors(errors: Array<{ message: string }> | undefined): void {
-  if (!errors || errors.length === 0) return;
-  throw new LinearApiError(errors.map((error) => error.message).join("; "));
-}
-
 export function createLinearIssueSearch(options: LinearIssueSearchOptions): LinearIssueSearch {
-  const apiKey = options.apiKey.trim();
-  if (!apiKey) throw new LinearApiError("Set LINEAR_API_KEY in the daemon environment");
-  const endpoint = options.endpoint ?? "https://api.linear.app/graphql";
-  const request = options.request ?? fetch;
-
-  async function graphql(body: GraphqlRequest): Promise<unknown> {
-    const response = await request(endpoint, {
-      method: "POST",
-      headers: {
-        Authorization: apiKey,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new LinearApiError(describeHttpFailure(response.status));
-    return response.json();
-  }
+  const graphql = createLinearGraphql(options);
 
   async function findExact(identifier: string): Promise<LinearAttachmentItem[]> {
     const response = ExactIssueResponseSchema.parse(
-      await graphql({ query: EXACT_ISSUE_QUERY, variables: { id: identifier } }),
+      await graphql(EXACT_ISSUE_QUERY, { id: identifier }),
     );
-    throwGraphqlErrors(response.errors);
-    return response.data?.issue ? [toAttachmentItem(response.data.issue)] : [];
+    return response.issue ? [toAttachmentItem(response.issue)] : [];
   }
 
   async function searchTitles(query: string): Promise<LinearAttachmentItem[]> {
     const filter = query ? { title: { containsIgnoreCase: query } } : null;
     const response = IssueSearchResponseSchema.parse(
-      await graphql({ query: SEARCH_ISSUES_QUERY, variables: { filter } }),
+      await graphql(SEARCH_ISSUES_QUERY, { filter }),
     );
-    throwGraphqlErrors(response.errors);
-    if (!response.data) throw new LinearApiError("Linear returned no issue data");
-    return response.data.issues.nodes.map(toAttachmentItem);
+    return response.issues.nodes.map(toAttachmentItem);
   }
 
   return {

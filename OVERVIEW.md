@@ -1,24 +1,33 @@
 # Linear issues
 
-Adds **Attach Linear issue** to the message composer. Search your Linear issues, select one, and the agent receives the issue text with your prompt.
+Browse and edit Linear issues in Paseo, and start agents from them. Open **Linear** from the sidebar, or open the Linear panel in a workspace. Requires Paseo 0.10.0 or newer.
 
-## Setup
+## Connect Linear
 
-Set `LINEAR_API_KEY` to a Linear personal API key in the environment that starts the Paseo daemon, then restart the daemon. Create the key in Linear under Settings → Security & access → Personal API keys. The plugin only reads issues, so read permission is enough. Requires Paseo 0.9.0 or newer.
+Paste a Linear personal API key in **Settings → Plugins → Linear → Account**. Create the key in Linear under Settings → Security & access → Personal API keys. To change issues, the key must have write access. The daemon saves the key on its host with owner-only permissions. If no key is saved, the plugin uses `LINEAR_API_KEY` from the daemon environment.
 
-## Search
+To use a different Linear key for one Paseo project, add it under **Project keys**. Workspace panels in that project use its key. The Linear screen shows a key button to switch keys.
 
-- An identifier such as `ENG-123` returns that issue only. Case does not matter.
-- Other text matches issue titles, without case sensitivity. Descriptions and comments are not searched.
-- An empty search lists the 20 most recently updated issues. Title searches also return up to 20 issues.
-- Each result shows its status and assignee.
+## Browse issues
 
-## What the agent receives
+- Search titles and descriptions, or type an identifier such as `ENG-123`.
+- Filter by assignee and status. Pick a team to see only its issues.
+- Sort by Last updated, Newest, Priority, Due date, or Title.
+- Select **Sub-issues** to nest sub-issues under their parent. The breadcrumbs above an issue show its team and parent chain.
+- Change the status, priority, and assignee. Add comments, or create an issue.
+- Descriptions and comments show as Markdown.
+- `/linear` opens the panel. `/linear ENG-123` opens an issue.
 
-The attachment text contains the identifier, title, URL, status, priority, assignee, project, labels, and description. The plugin takes this snapshot when you select the issue. Later changes in Linear do not update it.
+## Start an agent
+
+Select **Start agent** or **Start review** on an issue. The setup page shows the prompt and chips for Prompt, Agent, Model, Effort, and Mode. Choose the project and where the agent runs: a new worktree, a pull request checkout, the issue branch, an existing agent workspace, or the current workspace or project folder. You can include comments in the prompt. For Implement, you can also move the issue to In Progress and assign it to you.
+
+The prompt follows the template until you edit it. **Reset prompt** restores it. Edit the templates in **Prompts**, and add project instructions in **Projects**.
+
+## Attach an issue
+
+Choose **Attach Linear issue** in the composer attachment menu. The agent gets the issue text with your message. This uses the default key.
 
 ## Data and permissions
 
-The daemon subprocess sends GraphQL queries to `https://api.linear.app/graphql` with your key. The app never receives the key. Results include any issue the key can read. Paseo sends the selected snapshot to the agent provider with the message.
-
-A rejected key, a rate limit, or a GraphQL error appears as the picker's result text. A new key takes effect only after a daemon restart.
+Only the daemon sends requests to `https://api.linear.app/graphql`. The daemon never sends a key back to the app. Paseo sends the prompt, with the issue snapshot, to the agent provider. The daemon keeps recent Linear responses in memory for up to 24 hours, and the list shows them with **Showing saved results. Updating…** while it gets new data.

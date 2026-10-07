@@ -1,7 +1,7 @@
 {
   "name": "@yannelli/paseo-linear-plugin",
   "version": "0.1.0",
-  "description": "Attach Linear issues to Paseo agent prompts",
+  "description": "Browse and triage Linear issues in Paseo and start agents from them",
   "license": "Apache-2.0",
   "type": "module",
   "keywords": [
@@ -24,8 +24,9 @@
     "paseo-plugin.json",
     "OVERVIEW.md",
     "NOTICE",
-    "index.client.ts",
+    "index.client.tsx",
     "index.server.ts",
+    "client/",
     "server/",
     "shared/"
   ],
