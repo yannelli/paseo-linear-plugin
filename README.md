@@ -202,4 +202,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, commit message rules, 
 
 ## License
 
-Apache License 2.0. The plugin source comes from the Linear example in [getpaseo/paseo](https://github.com/getpaseo/paseo/tree/main/plugin-examples/linear). See [NOTICE](NOTICE).
+Apache License 2.0. The plugin started as the Linear example plugin (`plugin-examples/linear`) in [getpaseo/paseo](https://github.com/getpaseo/paseo). See [NOTICE](NOTICE).

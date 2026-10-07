@@ -4,7 +4,7 @@ Copyright 2026 Ryan Yannelli
 This product includes software from Paseo (https://github.com/getpaseo/paseo),
 Copyright (c) 2025-present Mohamed Boudra, licensed under the Apache License,
 Version 2.0. The plugin source in index.client.tsx, index.server.ts, client/,
-server/, shared/, and test/linear.test.ts comes from plugin-examples/linear in
-the Paseo repository. This repository adds Linear keys per Paseo project, a
+server/, shared/, and test/linear.test.ts started as the Linear example plugin
+(plugin-examples/linear) in the Paseo repository. This repository adds Linear keys per Paseo project, a
 response cache, list sorting, sub-issue nesting and breadcrumbs, Markdown
 rendering, and the agent setup page. It also changes the package metadata.
