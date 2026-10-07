@@ -1,5 +1,5 @@
 import { type PluginSurfaceProps, useSettings } from "@getpaseo/plugin/client";
-import { TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
@@ -11,11 +11,14 @@ import {
   type LinearSettings,
   linearSettings,
 } from "../shared/settings";
+import { modeIcon, optionLabel } from "./agent-options";
 import { useKeyScope } from "./key-scope";
 import { type LaunchChoices, useLaunchChoices } from "./launch-choices";
 import { Chip, Field, Toggle } from "./launch-fields";
 import { linearPatch, type TargetWorkspace, useLaunchAgent } from "./launch-plan";
+import { ModelBrowser } from "./model-browser";
 import { PickerModal } from "./pickers";
+import { ProviderIcon } from "./provider-icon";
 import { useCatalog, useIssue } from "./queries";
 import { Button, EmptyState, errorMessage, IconButton, SectionLabel, type Theme } from "./ui";
 
@@ -35,7 +38,8 @@ export interface LaunchPageProps {
   onStarted(): void;
 }
 
-type PickerKind = "prompt" | "agent" | "model" | "effort" | "mode" | "project" | "placement";
+type PickerKind = "prompt" | "model" | "effort" | "mode" | "project" | "placement";
+type ListPickerKind = Exclude<PickerKind, "model">;
 
 const SCROLL_STYLE = { flex: 1 } as const;
 const PROMPT_CHOICES = AGENT_ACTIONS.map((action) => ({
@@ -64,46 +68,37 @@ export function LaunchPage(props: LaunchPageProps) {
   );
 }
 
-function pickerConfig(kind: PickerKind, choices: LaunchChoices, action: AgentAction) {
+function pickerConfig(
+  kind: ListPickerKind,
+  choices: LaunchChoices,
+  action: AgentAction,
+  theme: Theme,
+) {
   const { agent } = choices;
+  const color = theme.colors.foreground;
   switch (kind) {
     case "prompt":
       return { title: "Prompt", icon: "FileText", value: action, options: PROMPT_CHOICES };
-    case "agent":
-      return {
-        title: "Agent",
-        icon: "Bot",
-        value: agent?.agent.id ?? null,
-        options: choices.agents.map((entry) => ({ value: entry.id, label: entry.label })),
-      };
-    case "model":
-      return {
-        title: "Model",
-        icon: "Cpu",
-        value: agent?.model.id ?? null,
-        options: (agent?.agent.models ?? []).map((entry) => ({
-          value: entry.id,
-          label: entry.label,
-        })),
-      };
     case "effort":
       return {
-        title: "Effort",
-        icon: "Gauge",
+        title: "Thinking",
+        icon: "Brain",
         value: agent?.effort?.id ?? null,
         options: (agent?.model.efforts ?? []).map((entry) => ({
           value: entry.id,
-          label: entry.label,
+          label: optionLabel(entry),
+          leading: <Icon name="Brain" size={16} color={color} />,
         })),
       };
     case "mode":
       return {
         title: "Mode",
-        icon: "Shield",
+        icon: agent?.mode ? modeIcon(agent.mode) : "ShieldCheck",
         value: agent?.mode?.id ?? null,
         options: (agent?.agent.modes ?? []).map((entry) => ({
           value: entry.id,
-          label: entry.label,
+          label: optionLabel(entry),
+          leading: <Icon name={modeIcon(entry)} size={16} color={color} />,
         })),
       };
     case "project":
@@ -127,9 +122,9 @@ function pickerConfig(kind: PickerKind, choices: LaunchChoices, action: AgentAct
   }
 }
 
-function agentLabel(choices: LaunchChoices): string {
-  if (choices.agent) return choices.agent.agent.label;
-  return choices.providers.isPending ? "Loading…" : "None available";
+function modelLabel(choices: LaunchChoices): string {
+  if (choices.agent) return choices.agent.model.label;
+  return choices.providers.isPending ? "Loading..." : "No agents available";
 }
 
 function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings: LinearSettings }) {
@@ -216,10 +211,9 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
       chips: {
         flexDirection: "row" as const,
         flexWrap: "wrap" as const,
-        gap: 8,
-        padding: 10,
-        borderTopWidth: 1,
-        borderTopColor: colors.border,
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingBottom: 8,
       },
       note: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8 },
       hint: { flex: 1, color: colors.foregroundMuted, fontSize: 12 },
@@ -234,18 +228,24 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
   const select = useCallback(
     (value: string) => {
       setPicker(null);
-      const handlers: Record<PickerKind, (value: string) => void> = {
+      const handlers: Record<ListPickerKind, (value: string) => void> = {
         prompt: choosePrompt,
-        agent: choices.chooseAgent,
-        model: choices.chooseModel,
         effort: choices.chooseEffort,
         mode: choices.chooseMode,
         project: choices.chooseProject,
         placement: choices.choosePlacement,
       };
-      if (picker) handlers[picker](value);
+      if (picker && picker !== "model") handlers[picker](value);
     },
     [picker, choices, choosePrompt],
+  );
+  const { chooseModel } = choices;
+  const selectModel = useCallback(
+    (agentId: string, modelId: string) => {
+      setPicker(null);
+      chooseModel(agentId, modelId);
+    },
+    [chooseModel],
   );
   const resetPrompt = useCallback(() => setCustomPrompt(null), []);
   const { mutate } = launch;
@@ -303,8 +303,9 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
   ]);
 
   const open = (kind: PickerKind) => () => setPicker(kind);
-  const config = picker ? pickerConfig(picker, choices, action) : null;
+  const config = picker && picker !== "model" ? pickerConfig(picker, choices, action, theme) : null;
   const { agent } = choices;
+  const muted = colors.foregroundMuted;
   return (
     <View style={styles.root}>
       <View style={styles.bar}>
@@ -328,21 +329,49 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
             style={styles.input}
           />
           <View style={styles.chips}>
-            <Chip theme={theme} label="Prompt" value={label.title} onPress={open("prompt")} />
-            <Chip theme={theme} label="Agent" value={agentLabel(choices)} onPress={open("agent")} />
-            {agent ? (
-              <Chip theme={theme} label="Model" value={agent.model.label} onPress={open("model")} />
-            ) : null}
+            <Chip
+              theme={theme}
+              icon={<Icon name="FileText" size={16} color={muted} />}
+              value={label.title}
+              accessibilityLabel={`Change prompt: ${label.title}`}
+              onPress={open("prompt")}
+            />
+            <Chip
+              theme={theme}
+              icon={
+                agent ? (
+                  <ProviderIcon
+                    provider={agent.agent.id}
+                    iconSvg={agent.agent.iconSvg}
+                    size={16}
+                    color={muted}
+                  />
+                ) : (
+                  <Icon name="Bot" size={16} color={muted} />
+                )
+              }
+              value={modelLabel(choices)}
+              accessibilityLabel={`Change model: ${modelLabel(choices)}`}
+              disabled={!agent}
+              onPress={open("model")}
+            />
             {agent?.effort ? (
               <Chip
                 theme={theme}
-                label="Effort"
-                value={agent.effort.label}
+                icon={<Icon name="Brain" size={16} color={muted} />}
+                value={optionLabel(agent.effort)}
+                accessibilityLabel={`Thinking mode: ${optionLabel(agent.effort)}`}
                 onPress={open("effort")}
               />
             ) : null}
             {agent?.mode ? (
-              <Chip theme={theme} label="Mode" value={agent.mode.label} onPress={open("mode")} />
+              <Chip
+                theme={theme}
+                icon={<Icon name={modeIcon(agent.mode)} size={16} color={muted} />}
+                value={optionLabel(agent.mode)}
+                accessibilityLabel={`Change mode: ${optionLabel(agent.mode)}`}
+                onPress={open("mode")}
+              />
             ) : null}
           </View>
         </View>
@@ -435,9 +464,19 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
           open
           options={config.options}
           value={config.value}
-          searchable={config.options.length > 8}
+          searchable={config.options.length > 6}
           onClose={close}
           onSelect={select}
+        />
+      ) : null}
+      {picker === "model" ? (
+        <ModelBrowser
+          theme={theme}
+          agents={choices.agents}
+          agentId={agent?.agent.id ?? null}
+          modelId={agent?.model.id ?? null}
+          onClose={close}
+          onSelect={selectModel}
         />
       ) : null}
     </View>

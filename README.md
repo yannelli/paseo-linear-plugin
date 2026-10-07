@@ -15,7 +15,7 @@ A Paseo plugin for Linear. It adds a Linear screen and a workspace panel where y
 
 ![Linear screen with an issue list grouped by status on the left and issue ENG-123 open on the right](docs/images/browse.png)
 
-![Agent setup page for ENG-123 with the prompt, the Prompt, Agent, Model, and Effort chips, the Project and Run in fields, and three options](docs/images/launch.png)
+![Agent setup page for ENG-123 with the prompt, the prompt, model, thinking, and mode controls, the Project and Run in fields, and three options](docs/images/launch.png)
 
 ![Linear account settings with the default key status, the default key form, and a project key for Acme Mobile](docs/images/keys.png)
 
@@ -96,7 +96,9 @@ The issue header shows breadcrumbs: the team, the parent chain, then the issue, 
 Select **Start agent** or **Start review** in the issue view. The agent setup page opens in the panel or the screen. It works with or without a current workspace.
 
 1. Edit the prompt in the prompt box if you want. The prompt follows the template and options until you edit it. Select **Reset prompt** to go back to the template.
-2. Use the chips under the prompt box to set **Prompt** (Implement or Review), **Agent**, **Model**, **Effort**, and **Mode**. **Mode** shows when the agent has modes.
+2. Use the controls under the prompt box, as in the Paseo composer. They set the prompt template (Implement or Review), the model, the thinking level, and the mode. The thinking level shows when the model has levels, and the mode shows when the agent has modes.
+   - The model picker lists the providers first. Select a provider to see its models, or search to find models from all providers.
+   - Choosing a model from another provider also changes the agent, and resets the thinking level and mode to that agent's defaults.
 3. Choose the **Project**. The default is the project of the current workspace. Without a workspace, it is the last project you used for the team, then a project mapped to the team.
 4. Choose where the agent runs in **Run in**:
    - **New worktree** on the issue branch.
@@ -137,6 +139,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 | `client/issue-detail.tsx`, `client/issue-sections.tsx`, `client/breadcrumbs.tsx` | App | Issue view: properties, breadcrumbs, sub-issues, links, agents, and comments |
 | `client/markdown.tsx` | App | Renders Markdown |
 | `client/launch.tsx`, `client/launch-fields.tsx`, `client/launch-choices.ts`, `client/launch-plan.ts`, `client/agent-options.ts` | App | Agent setup page, Run in options, and agent start |
+| `client/model-browser.tsx`, `client/provider-icon.tsx` | App | Model picker and provider icons |
 | `client/create-issue.tsx`, `client/pickers.tsx` | App | New issue form and option pickers |
 | `client/connect.tsx`, `client/settings-*.tsx` | App | Key form and settings screens |
 | `client/queries.ts`, `client/store.ts`, `client/key-scope.tsx` | App | Data hooks with saved results, browser state, and the key in use |

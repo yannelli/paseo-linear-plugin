@@ -84,11 +84,15 @@ export function useLaunchChoices(input: {
     (value: string) => setPlacementChoice(value as Placement),
     [],
   );
-  // A new agent starts from its own default model, effort, and mode.
-  const chooseAgent = useCallback((value: string) => setPicks({ ...NO_PICKS, agent: value }), []);
+  // A model from another agent starts from that agent's default effort and mode.
   const chooseModel = useCallback(
-    (value: string) => setPicks((current) => ({ ...current, model: value, effort: null })),
-    [],
+    (agentId: string, modelId: string) =>
+      setPicks((current) =>
+        current.agent === agentId || (current.agent === null && agent?.agent.id === agentId)
+          ? { ...current, agent: agentId, model: modelId, effort: null }
+          : { ...NO_PICKS, agent: agentId, model: modelId },
+      ),
+    [agent?.agent.id],
   );
   const chooseEffort = useCallback(
     (value: string) => setPicks((current) => ({ ...current, effort: value })),
@@ -112,7 +116,6 @@ export function useLaunchChoices(input: {
     placement,
     chooseProject,
     choosePlacement,
-    chooseAgent,
     chooseModel,
     chooseEffort,
     chooseMode,

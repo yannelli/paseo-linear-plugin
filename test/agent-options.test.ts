@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { agentChoices, agentConfig, resolveAgent } from "../client/agent-options";
+import {
+  agentChoices,
+  agentConfig,
+  modeIcon,
+  optionLabel,
+  resolveAgent,
+  searchModels,
+} from "../client/agent-options";
 
 const efforts = [
   { id: "low", label: "Low" },
@@ -14,12 +21,12 @@ const full = {
       status: "ready",
       modes: [
         { id: "default", label: "Ask" },
-        { id: "bypass", label: "Full access" },
+        { id: "bypass", label: "Full access", icon: "ShieldOff", colorTier: "danger" },
       ],
       defaultModeId: "default",
       models: [
         { id: "opus", label: "Opus", thinkingOptions: efforts, defaultThinkingOptionId: "low" },
-        { id: "sonnet", label: "Sonnet", isDefault: true },
+        { id: "sonnet", label: "Sonnet", description: "Best for everyday work", isDefault: true },
         { id: "hidden", label: "Hidden", isSelectable: false },
       ],
     },
@@ -81,5 +88,34 @@ describe("agent choices", () => {
     const sonnet = resolveAgent(agents, { ...none, model: "sonnet", effort: "high" }, "");
     expect(sonnet && agentConfig(sonnet)).toEqual({ provider: "claude/sonnet", modeId: "default" });
     expect(resolveAgent([], none, "")).toBeNull();
+  });
+
+  it("keeps model descriptions and mode icons", () => {
+    const [claude] = agentChoices(full);
+    expect(claude?.models[1]?.description).toBe("Best for everyday work");
+    expect(claude?.modes[1]).toEqual({
+      id: "bypass",
+      label: "Full access",
+      icon: "ShieldOff",
+      colorTier: "danger",
+    });
+  });
+
+  it("searches models across agents by every word", () => {
+    const agents = agentChoices(full);
+    const ids = (query: string) => searchModels(agents, query).map((match) => match.model.id);
+    expect(ids("claude")).toEqual(["opus", "sonnet"]);
+    expect(ids("everyday son")).toEqual(["sonnet"]);
+    expect(ids("opus everyday")).toEqual([]);
+    expect(ids("  ")).toEqual([]);
+  });
+
+  it("labels and icons options the way Paseo does", () => {
+    expect(optionLabel({ id: "xhigh", label: "Extra High" })).toBe("Extra high");
+    expect(optionLabel({ id: "auto", label: "Auto Mode" })).toBe("Auto mode");
+    const mode = { id: "m", label: "M", colorTier: null };
+    expect(modeIcon({ ...mode, icon: "ShieldOff" })).toBe("ShieldOff");
+    expect(modeIcon({ ...mode, icon: null })).toBe("ShieldCheck");
+    expect(modeIcon({ ...mode, icon: "Rocket" })).toBe("Bot");
   });
 });

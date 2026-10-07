@@ -20,7 +20,7 @@ To use a different Linear key for one Paseo project, add it under **Project keys
 
 ## Start an agent
 
-Select **Start agent** or **Start review** on an issue. The setup page shows the prompt and chips for Prompt, Agent, Model, Effort, and Mode. Choose the project and where the agent runs: a new worktree, a pull request checkout, the issue branch, an existing agent workspace, or the current workspace or project folder. You can include comments in the prompt. For Implement, you can also move the issue to In Progress and assign it to you.
+Select **Start agent** or **Start review** on an issue. The setup page shows the prompt and the composer controls for the prompt template, model, thinking level, and mode. The model picker lists providers first, and its search covers all models. Choose the project and where the agent runs: a new worktree, a pull request checkout, the issue branch, an existing agent workspace, or the current workspace or project folder. You can include comments in the prompt. For Implement, you can also move the issue to In Progress and assign it to you.
 
 The prompt follows the template until you edit it. **Reset prompt** restores it. Edit the templates in **Prompts**, and add project instructions in **Projects**.
 

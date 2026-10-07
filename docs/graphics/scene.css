@@ -213,21 +213,20 @@ h1 { margin: 0; font-size: 34px; line-height: 42px; font-weight: 600; letter-spa
 .prompt-box { border: 1px solid var(--border); border-radius: 12px; background: var(--surface1); overflow: hidden; }
 .prompt { position: relative; padding: 14px 22px 14px 14px; font-size: 14px; line-height: 20px; white-space: pre; }
 .thumb { position: absolute; top: 10px; right: 5px; width: 4px; height: 64px; border-radius: 2px; background: var(--surface3); }
-.chip-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
+.chip-row { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 8px 8px; }
 .chip {
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  background: var(--surface1);
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 13px;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 14px;
   white-space: nowrap;
 }
-.chip small { color: var(--muted); font-size: 12px; }
-.chip .i { width: 12px; height: 12px; color: var(--muted); }
+.chip .i { width: 16px; height: 16px; stroke-width: 1.5; }
+.chip .i.chev-down { width: 14px; height: 14px; transform: translateY(1px); }
 .hint { color: var(--muted); font-size: 12px; }
 .stack { display: flex; flex-direction: column; gap: 8px; }
 .stack .section-label { margin-bottom: -2px; }
