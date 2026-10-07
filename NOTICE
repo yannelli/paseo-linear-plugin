@@ -8,3 +8,6 @@ server/, shared/, and test/linear.test.ts started as the Linear example plugin
 (plugin-examples/linear) in the Paseo repository. This repository adds Linear keys per Paseo project, a
 response cache, list sorting, sub-issue nesting and breadcrumbs, Markdown
 rendering, and the agent setup page. It also changes the package metadata.
+
+client/provider-icon.tsx contains the provider icons from the Paseo app
+(packages/app/src/components/icons). Each icon is a mark of its owner.

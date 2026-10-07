@@ -6,14 +6,22 @@ export interface Choice {
 }
 
 export interface ModelChoice extends Choice {
+  description: string | null;
   isDefault: boolean;
   efforts: Choice[];
   defaultEffortId: string | null;
 }
 
+export interface ModeChoice extends Choice {
+  icon: string | null;
+  colorTier: string | null;
+}
+
 export interface AgentChoice extends Choice {
+  /** SVG markup for custom providers. Built-in providers have none. */
+  iconSvg: string | null;
   models: ModelChoice[];
-  modes: Choice[];
+  modes: ModeChoice[];
   defaultModeId: string | null;
 }
 
@@ -26,6 +34,7 @@ interface ThinkingOption {
 interface SnapshotModel {
   id: string;
   label: string;
+  description?: string;
   isDefault?: boolean;
   isSelectable?: boolean;
   thinkingOptions?: readonly ThinkingOption[];
@@ -36,10 +45,11 @@ interface SnapshotModel {
 interface SnapshotEntry {
   provider: string;
   label?: string;
+  iconSvg?: string;
   status: string;
   enabled?: boolean;
   models?: readonly SnapshotModel[];
-  modes?: readonly Choice[];
+  modes?: readonly (Choice & { icon?: string; colorTier?: string })[];
   defaultModeId?: string | null;
 }
 
@@ -60,6 +70,7 @@ export function agentChoices(snapshot: ProviderSnapshot): AgentChoice[] {
     .map((entry) => ({
       id: entry.provider,
       label: entry.label ?? entry.provider,
+      iconSvg: entry.iconSvg ?? null,
       models: (entry.models ?? [])
         .filter((model) => model.isSelectable !== false)
         .map((model) => {
@@ -70,12 +81,18 @@ export function agentChoices(snapshot: ProviderSnapshot): AgentChoice[] {
           return {
             id: model.id,
             label: model.label,
+            description: model.description ?? null,
             isDefault: model.isDefault === true,
             efforts: options.map(({ id, label }) => ({ id, label })),
             defaultEffortId: model.defaultThinkingOptionId ?? set?.defaultOptionId ?? fallback,
           };
         }),
-      modes: (entry.modes ?? []).map(({ id, label }) => ({ id, label })),
+      modes: (entry.modes ?? []).map(({ id, label, icon, colorTier }) => ({
+        id,
+        label,
+        icon: icon ?? null,
+        colorTier: colorTier ?? null,
+      })),
       defaultModeId: entry.defaultModeId ?? null,
     }))
     .filter((entry) => entry.models.length > 0);
@@ -85,7 +102,7 @@ export interface AgentSelection {
   agent: AgentChoice;
   model: ModelChoice;
   effort: Choice | null;
-  mode: Choice | null;
+  mode: ModeChoice | null;
 }
 
 export interface AgentPicks {
@@ -133,4 +150,51 @@ export function agentConfig(selection: AgentSelection) {
     ...(selection.effort ? { thinkingOptionId: selection.effort.id } : {}),
     ...(selection.mode ? { modeId: selection.mode.id } : {}),
   };
+}
+
+export interface ModelMatch {
+  agent: AgentChoice;
+  model: ModelChoice;
+}
+
+/** Models whose name, id, description, or agent name contain every word of the query. */
+export function searchModels(agents: readonly AgentChoice[], query: string): ModelMatch[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  return agents.flatMap((agent) =>
+    agent.models
+      .filter((model) => {
+        const text = [model.label, model.id, model.description ?? "", agent.label]
+          .join(" ")
+          .toLowerCase();
+        return words.every((word) => text.includes(word));
+      })
+      .map((model) => ({ agent, model })),
+  );
+}
+
+const MODE_ICONS = new Set([
+  "Bot",
+  "Shield",
+  "ShieldAlert",
+  "ShieldCheck",
+  "ShieldEllipsis",
+  "ShieldOff",
+  "ShieldPlus",
+  "ShieldQuestionMark",
+]);
+
+/** The Lucide icon Paseo shows for a mode. */
+export function modeIcon(mode: ModeChoice): string {
+  const icon = mode.icon ?? "ShieldCheck";
+  return MODE_ICONS.has(icon) ? icon : "Bot";
+}
+
+function sentenceCase(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+}
+
+/** Effort and mode names as Paseo writes them, for example "Extra high". */
+export function optionLabel(option: Choice): string {
+  return option.id === "xhigh" ? "Extra high" : sentenceCase(option.label);
 }

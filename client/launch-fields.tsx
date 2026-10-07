@@ -1,54 +1,68 @@
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useMemo } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { type ReactNode, useCallback, useMemo } from "react";
+import { Pressable, type PressableStateCallbackType, Switch, Text, View } from "react-native";
 import { type Theme, usePressableStyle } from "./ui";
 
-// A compact picker button: a muted name, then the current value. Used under the prompt box.
+// Matches the controls under Paseo's agent composer: an icon, the value, and a chevron.
 export function Chip(props: {
   theme: Theme;
-  label: string;
+  icon: ReactNode;
   value: string;
-  icon?: string;
+  accessibilityLabel: string;
   disabled?: boolean;
   onPress(): void;
 }) {
   const { colors } = props.theme;
   const styles = useMemo(() => {
     const idle = {
-      height: 30,
-      paddingHorizontal: 10,
-      borderRadius: 15,
-      borderWidth: 1,
-      borderColor: colors.border,
+      height: 28,
+      paddingHorizontal: 8,
+      borderRadius: 16,
       flexDirection: "row" as const,
       alignItems: "center" as const,
-      gap: 6,
-      backgroundColor: colors.surface1,
-      opacity: props.disabled ? 0.5 : 1,
+      gap: 4,
+      minWidth: 0,
       maxWidth: 260,
+      opacity: props.disabled ? 0.5 : 1,
     };
     return {
       idle,
-      active: { ...idle, backgroundColor: colors.surface2 },
-      label: { color: colors.foregroundMuted, fontSize: 12 },
-      value: { color: colors.foreground, fontSize: 13, flexShrink: 1 },
+      hovered: { ...idle, backgroundColor: colors.surface2 },
+      pressed: { ...idle, backgroundColor: colors.surface0 },
+      icon: {
+        width: 16,
+        height: 16,
+        alignItems: "center" as const,
+        justifyContent: "center" as const,
+      },
+      value: { color: colors.foregroundMuted, fontSize: 14, flexShrink: 1, minWidth: 0 },
+      chevron: { transform: [{ translateY: 1 }] },
     };
   }, [colors, props.disabled]);
-  const style = usePressableStyle(styles.idle, styles.active);
+  const style = useCallback(
+    (state: PressableStateCallbackType) =>
+      state.pressed
+        ? styles.pressed
+        : (state as { hovered?: boolean }).hovered
+          ? styles.hovered
+          : styles.idle,
+    [styles],
+  );
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${props.label}: ${props.value}`}
+      accessibilityLabel={props.accessibilityLabel}
       disabled={props.disabled}
       onPress={props.onPress}
       style={style}
     >
-      {props.icon ? <Icon name={props.icon} size={13} color={colors.foregroundMuted} /> : null}
-      <Text style={styles.label}>{props.label}</Text>
+      <View style={styles.icon}>{props.icon}</View>
       <Text numberOfLines={1} style={styles.value}>
         {props.value}
       </Text>
-      <Icon name="ChevronDown" size={12} color={colors.foregroundMuted} />
+      <View style={styles.chevron}>
+        <Icon name="ChevronDown" size={14} color={colors.foregroundMuted} />
+      </View>
     </Pressable>
   );
 }
