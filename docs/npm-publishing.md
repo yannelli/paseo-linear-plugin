@@ -18,7 +18,7 @@ The job grants `id-token: write`. npm uses the OIDC token to authenticate and at
 
 ## First publish
 
-npm trusted publishing needs an existing package, so the first version is published by hand. Until then, the **Publish npm package** step fails on its first run. This is expected. Use npm CLI 11.15.0 or newer and an npm account with 2FA.
+npm trusted publishing needs an existing package, so the first version is published by hand. Until then, the **Publish npm package** step fails on each run. This is expected. Use npm CLI 11.15.0 or newer and an npm account with 2FA.
 
 1. Log in:
 
@@ -39,16 +39,18 @@ npm trusted publishing needs an existing package, so the first version is publis
    npm publish
    ```
 
-3. Trust the release workflow:
+3. Run the **Release** workflow again from the Actions tab, or run `gh workflow run release.yml --repo yannelli/paseo-linear-plugin`. The npm step finds 0.1.0 and passes.
+
+4. Trust the release workflow when a `feat:` or `fix:` commit is ready to merge. A new trust entry expires unless a publish through it succeeds [within 2 days](https://docs.npmjs.com/trusted-publishers). The release from that commit, for example 0.1.1, is the first publish through OIDC.
 
    ```sh
    npm trust github @yannelli/paseo-linear-plugin --repo yannelli/paseo-linear-plugin --file release.yml --allow-publish
    npm trust list @yannelli/paseo-linear-plugin
    ```
 
-4. On npmjs.com, open the package's **Settings**. Set **Publishing access** to require 2FA and disallow tokens. The workflow publishes without a token.
+   If the entry expires, revoke it and run `npm trust github` again.
 
-5. Run the **Release** workflow again from the Actions tab, or run `gh workflow run release.yml --repo yannelli/paseo-linear-plugin`. The npm step finds 0.1.0 and passes.
+5. After that release appears on npm, open the package's **Settings** on npmjs.com. Set **Publishing access** to require 2FA and disallow tokens. The workflow publishes without a token.
 
 Later `feat:` and `fix:` commits on `main` publish through the workflow.
 
