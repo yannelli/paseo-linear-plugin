@@ -31,8 +31,10 @@ The images are illustrations with sample data. They come from `docs/graphics`; s
 
 ```sh
 paseo plugin add npm:@yannelli/paseo-linear-plugin
-paseo plugin ls linear
+paseo plugin ls paseo-linear-plugin
 ```
+
+Version 0.4.0 and earlier used the id `linear`. To upgrade from those versions, run `paseo plugin remove linear` first, then add the plugin again. Your saved keys stay in place.
 
 To pin a version, add it to the source, for example `npm:@yannelli/paseo-linear-plugin@0.1.0`. To install a Git tag instead, run `paseo plugin add github:yannelli/paseo-linear-plugin --ref v0.1.0`. Plugins run trusted code with the daemon user's access.
 
@@ -174,7 +176,7 @@ npm run check
 paseo plugin add "$PWD"
 ```
 
-After you edit the source, run `paseo plugin reload linear`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser and task list toggle, the description autosave, the agent options, and the release scripts. They use a local GraphQL server and do not call Linear.
+After you edit the source, run `paseo plugin reload paseo-linear-plugin`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser and task list toggle, the description autosave, the agent options, and the release scripts. They use a local GraphQL server and do not call Linear.
 
 ## Graphics
 

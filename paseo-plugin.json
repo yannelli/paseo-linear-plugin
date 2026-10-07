@@ -1,5 +1,5 @@
 {
-  "id": "linear",
+  "id": "paseo-linear-plugin",
   "description": "Browse, triage, and create Linear issues, and start agents that implement or review them",
   "requirements": {
     "paseo": ">=0.10.0"

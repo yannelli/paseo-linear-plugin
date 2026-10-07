@@ -30,17 +30,17 @@ The tests use a local GraphQL server. They do not call Linear and do not need an
 
    ```sh
    paseo plugin add "$PWD"
-   paseo plugin ls linear
+   paseo plugin ls paseo-linear-plugin
    ```
 
 4. After each edit, reload the plugin. If something fails, read its output:
 
    ```sh
-   paseo plugin reload linear
-   paseo plugin logs linear
+   paseo plugin reload paseo-linear-plugin
+   paseo plugin logs paseo-linear-plugin
    ```
 
-If you already installed the npm release, remove it first with `paseo plugin remove linear`. Both installs use the id `linear`.
+If you already installed the npm release, remove it first with `paseo plugin remove paseo-linear-plugin`. Both installs use the id `paseo-linear-plugin`.
 
 ## Where things live
 
@@ -103,10 +103,10 @@ Format: `<type>(<optional scope>): <summary>`.
 
 Open an [issue](https://github.com/yannelli/paseo-linear-plugin/issues) and include:
 
-- The Paseo version, and the plugin source and revision from `paseo plugin ls linear`.
+- The Paseo version, and the plugin source and revision from `paseo plugin ls paseo-linear-plugin`.
 - Your operating system.
 - The steps that cause the problem, what you expected, and what happened.
-- The error text from the picker or from `paseo plugin logs linear`.
+- The error text from the picker or from `paseo plugin logs paseo-linear-plugin`.
 
 Remove your API key and any private issue content before you post.
 
