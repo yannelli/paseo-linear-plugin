@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Linear issues for Paseo graphics</title>
+<link rel="stylesheet" href="scene.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 40 32">
+    <circle class="ring" cx="13" cy="16" r="9.6"/>
+    <circle class="core" cx="13" cy="16" r="3.6"/>
+    <path class="arrow" d="M27 9.5 33.5 16 27 22.5"/>
+  </symbol>
+  <symbol id="circle-dot" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="1.2"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  <symbol id="arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
+  <symbol id="file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h6M16 13H8M16 17H8M10 9H8"/></symbol>
+  <symbol id="github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+</svg>
+
+<template id="backdrop">
+  <div class="aurora"></div>
+  <div class="grid"></div>
+  <svg class="rings"><g id="ring-group"></g></svg>
+</template>
+
+<template id="brand">
+  <div class="brand"><svg class="mark"><use href="#mark"/></svg><b>Linear issues</b><span>for Paseo</span></div>
+</template>
+
+<template id="picker">
+  <div class="card picker">
+    <div class="picker-head">Attach Linear issue</div>
+    <div class="search"><svg class="icon"><use href="#search"/></svg><span class="typed"></span><span class="caret"></span></div>
+    <div class="rows"></div>
+  </div>
+</template>
+
+<template id="composer">
+  <div class="card composer">
+    <div class="pill glow">
+      <svg class="icon"><use href="#circle-dot"/></svg>
+      <div><div class="title">Plugin attachments</div><div class="sub">Linear issue ENG-123</div></div>
+      <span class="x">&times;</span>
+    </div>
+    <div class="prompt">Implement this and add tests.<span class="caret"></span></div>
+    <div class="toolbar">
+      <span class="btn"><svg class="icon"><use href="#plus"/></svg></span>
+      <span>Claude Code</span><span class="spacer"></span>
+      <span class="send"><svg class="icon"><use href="#arrow-up"/></svg></span>
+    </div>
+  </div>
+</template>
+
+<template id="snapshot">
+  <div class="card">
+    <div class="card-label"><svg class="icon"><use href="#file-text"/></svg>Sent to the agent with the prompt</div>
+<div class="snapshot"><b>Linear issue ENG-123: Plugin attachments</b>
+<span class="k">URL:</span> <span class="url">https://linear.app/acme/issue/ENG-123</span>
+<span class="k">Status:</span> In Progress
+<span class="k">Priority:</span> High
+<span class="k">Assignee:</span> Mohamed
+<span class="k">Project:</span> Paseo
+<span class="k">Labels:</span> Feature
+
+Let extensions attach external context.</div>
+  </div>
+</template>
+
+<template id="terminal">
+  <div class="card">
+    <div class="dots"><i></i><i></i><i></i></div>
+<div class="term"><span class="c"># In the shell that starts the daemon</span>
+<span class="p">$</span> export LINEAR_API_KEY=<span class="s">"lin_api_&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;"</span>
+
+<span class="c"># Paseo 0.9.0 or newer</span>
+<span class="p">$</span> paseo plugin add <span class="s">npm:@yannelli/paseo-linear-plugin</span></div>
+  </div>
+</template>
+
+<template id="flow">
+  <div class="flow">
+    <div class="node">Paseo app<small>Picker and pill</small></div><div class="link"></div>
+    <div class="node key">Daemon<small>Holds the API key</small></div><div class="link"></div>
+    <div class="node">Linear API<small>GraphQL search</small></div>
+  </div>
+</template>
+
+<template id="chips">
+  <div class="chips">
+    <span class="chip"><svg><use href="#github"/></svg>yannelli/paseo-linear-plugin</span>
+    <span class="chip npm"><b>npm</b>@yannelli/paseo-linear-plugin</span>
+  </div>
+</template>
+
+<script>
+const ISSUES = [
+  { id: 'ENG-123', title: 'Plugin attachments', state: 'In Progress', who: 'Mohamed', color: '#f2c94c' },
+  { id: 'ENG-118', title: 'Plugin settings sync', state: 'Todo', who: 'Priya', color: '#a1a1aa' },
+  { id: 'ENG-104', title: 'Plugin icon in the sidebar', state: 'In Review', who: 'Sam', color: '#7ee0c3' },
+  { id: 'ENG-097', title: 'Plugin reload keeps drafts', state: 'Done', who: 'Lea', color: '#a5a6ff' },
+];
+
+function clone(id) {
+  return document.getElementById(id).content.firstElementChild.cloneNode(true);
+}
+
+function place(node, box) {
+  for (const [key, value] of Object.entries(box)) node.style[key] = typeof value === 'number' ? `${value}px` : value;
+  document.body.append(node);
+  return node;
+}
+
+function backdrop(rings) {
+  for (const node of document.getElementById('backdrop').content.children) document.body.append(node.cloneNode(true));
+  const group = document.getElementById('ring-group');
+  group.innerHTML = rings.radii.map((r, i) => `<circle cx="${rings.cx}" cy="${rings.cy}" r="${r}"${i === 0 ? ' class="dot"' : ''}/>`).join('');
+}
+
+function text(tag, className, html, box) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  node.innerHTML = html;
+  return place(node, box);
+}
+
+function headline(lines, box) {
+  return text('h1', '', lines.map((line) => `<span>${line}</span>`).join(''), box);
+}
+
+function picker(query, count, box) {
+  const card = clone('picker');
+  card.querySelector('.typed').textContent = query;
+  card.querySelector('.rows').innerHTML = ISSUES.slice(0, count).map((issue, i) => `
+    <div class="row${i === 0 ? ' active' : ''}">
+      <svg class="icon"><use href="#circle-dot"/></svg>
+      <div><div class="label"><code>${issue.id}</code>${issue.title}</div>
+      <div class="desc" style="--state:${issue.color}"><i></i>${issue.state} &middot; ${issue.who}</div></div>
+    </div>`).join('');
+  return place(card, box);
+}
+
+const SCENES = {
+  social: { width: 1280, height: 640, build() {
+    backdrop({ cx: 1010, cy: 300, radii: [120, 210, 300, 390, 480] });
+    place(clone('brand'), { left: 72, top: 64 });
+    text('div', 'eyebrow', 'Paseo plugin', { left: 72, top: 178 });
+    headline(['Hand your agent', '<em>the whole issue.</em>'], { left: 68, top: 204, fontSize: 66, lineHeight: '70px', letterSpacing: '-2.6px' });
+    text('p', 'lede', 'Search Linear from the composer and attach a stable issue snapshot to any prompt.', { left: 72, top: 370, width: 470, fontSize: 21, lineHeight: '31px' });
+    place(clone('chips'), { left: 72, top: 540 });
+    picker('plugin', 3, { left: 726, top: 58, width: 486 });
+    place(clone('composer'), { left: 650, top: 396, width: 468 });
+  } },
+  search: { width: 960, height: 540, build() {
+    backdrop({ cx: 690, cy: 270, radii: [90, 170, 250, 330, 410] });
+    place(clone('brand'), { left: 52, top: 46 });
+    text('div', 'eyebrow', '01 &middot; Search', { left: 56, top: 150 });
+    headline(['Find it by ID', '<em>or by title.</em>'], { left: 53, top: 172, fontSize: 50, lineHeight: '54px', letterSpacing: '-1.8px' });
+    text('p', 'lede', 'Type an identifier such as ENG-123 for an exact match, or words from the title. Each result shows its status and assignee.', { left: 56, top: 304, width: 340, fontSize: 17, lineHeight: '26px' });
+    picker('plugin', 4, { left: 452, top: 114, width: 456 });
+  } },
+  attach: { width: 960, height: 540, build() {
+    backdrop({ cx: 690, cy: 270, radii: [90, 170, 250, 330, 410] });
+    place(clone('brand'), { left: 52, top: 46 });
+    text('div', 'eyebrow', '02 &middot; Attach', { left: 56, top: 150 });
+    headline(['The agent reads', '<em>a stable snapshot.</em>'], { left: 53, top: 172, fontSize: 50, lineHeight: '54px', letterSpacing: '-1.8px' });
+    text('p', 'lede', 'The pill sends the issue text with your prompt: status, priority, assignee, project, labels, and the description.', { left: 56, top: 304, width: 330, fontSize: 17, lineHeight: '26px' });
+    place(clone('composer'), { left: 452, top: 54, width: 440 });
+    place(clone('snapshot'), { left: 484, top: 236, width: 444 });
+  } },
+  setup: { width: 960, height: 540, build() {
+    backdrop({ cx: 690, cy: 270, radii: [90, 170, 250, 330, 410] });
+    place(clone('brand'), { left: 52, top: 46 });
+    text('div', 'eyebrow', '03 &middot; Setup', { left: 56, top: 150 });
+    headline(['Your key stays', '<em>on the daemon.</em>'], { left: 53, top: 172, fontSize: 50, lineHeight: '54px', letterSpacing: '-1.8px' });
+    text('p', 'lede', 'Set LINEAR_API_KEY where the daemon runs. The app calls the plugin over RPC and never receives the key.', { left: 56, top: 304, width: 330, fontSize: 17, lineHeight: '26px' });
+    place(clone('terminal'), { left: 452, top: 116, width: 456 });
+    place(clone('flow'), { left: 452, top: 344 }).querySelectorAll('.node').forEach((node) => { node.style.width = '130px'; });
+    document.querySelectorAll('.link').forEach((link) => { link.style.width = '33px'; });
+  } },
+  icon: { width: 256, height: 256, build() {
+    const tile = document.createElement('div');
+    tile.className = 'icon-tile';
+    tile.innerHTML = '<div class="aurora"></div><svg class="mark" viewBox="0 0 40 32"><use href="#mark"/></svg>';
+    document.body.append(tile);
+    document.body.style.background = 'transparent';
+  } },
+};
+
+window.renderScene = async (name) => {
+  const scene = SCENES[name];
+  if (!scene) throw new Error(`Unknown scene: ${name}`);
+  Object.assign(document.body.style, { width: `${scene.width}px`, height: `${scene.height}px` });
+  scene.build();
+  await document.fonts.ready;
+  const fonts = ['Instrument Sans', 'JetBrains Mono'].every((family) => document.fonts.check(`16px "${family}"`));
+  const overflow = [...document.body.querySelectorAll('.card, h1, .lede, .chips, .flow, .brand')]
+    .map((node) => node.getBoundingClientRect())
+    .some((rect) => rect.left < 0 || rect.top < 0 || rect.right > scene.width || rect.bottom > scene.height);
+  return { width: scene.width, height: scene.height, fonts, overflow };
+};
+</script>
+</body>
+</html>

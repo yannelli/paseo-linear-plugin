@@ -1,0 +1,174 @@
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("fonts/instrument-sans.woff2") format("woff2");
+  font-weight: 400 700;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/jetbrains-mono.woff2") format("woff2");
+  font-weight: 100 800;
+}
+:root {
+  --ink: #0d0e1a;
+  --paper: #eef0ff;
+  --muted: rgba(238, 240, 255, 0.64);
+  --faint: rgba(238, 240, 255, 0.4);
+  --lilac: #a5a6ff;
+  --violet: #6b6cf6;
+  --mint: #7ee0c3;
+  /* Paseo dark theme tokens */
+  --surface0: #18181b;
+  --surface1: #1f1f22;
+  --surface2: #27272a;
+  --surface3: #3f3f46;
+  --fg: #fafafa;
+  --fg-muted: #a1a1aa;
+  --fg-faint: #71717a;
+  --accent: #20744a;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  position: relative;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: "Instrument Sans", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.mono { font-family: "JetBrains Mono", monospace; }
+
+/* Background: aurora, dot grid, and concentric rings that echo the mark. */
+.aurora, .grid, .rings { position: absolute; inset: 0; pointer-events: none; }
+.aurora {
+  background:
+    radial-gradient(560px 420px at 88% -8%, rgba(107, 108, 246, 0.5), rgba(107, 108, 246, 0) 70%),
+    radial-gradient(420px 300px at 70% 112%, rgba(126, 224, 195, 0.16), rgba(126, 224, 195, 0) 70%),
+    radial-gradient(380px 260px at -4% 40%, rgba(165, 166, 255, 0.1), rgba(165, 166, 255, 0) 70%);
+}
+.grid {
+  background-image: radial-gradient(rgba(165, 166, 255, 0.2) 1px, transparent 1.4px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(70% 80% at 72% 50%, #000 0%, transparent 78%);
+}
+.rings { width: 100%; height: 100%; }
+.rings circle { fill: none; stroke: rgba(165, 166, 255, 0.09); stroke-width: 1.5; }
+.rings circle.dot { fill: rgba(165, 166, 255, 0.05); stroke: none; }
+
+/* Brand mark: an issue ring with a chevron into the prompt. */
+#mark .ring { fill: none; stroke: var(--lilac); stroke-width: 3.6; }
+#mark .core { fill: var(--paper); }
+#mark .arrow { fill: none; stroke: var(--mint); stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
+.brand { position: absolute; display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.brand .mark { width: 36px; height: 29px; }
+.brand b { font-size: 21px; font-weight: 640; letter-spacing: -0.3px; }
+.brand span { font-size: 21px; font-weight: 440; color: var(--faint); letter-spacing: -0.3px; }
+
+.eyebrow {
+  position: absolute;
+  font: 500 12.5px/1 "JetBrains Mono", monospace;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--lilac);
+}
+.eyebrow::before { content: ""; display: inline-block; width: 18px; height: 1.5px; margin: 0 10px 3px 0; background: var(--mint); vertical-align: middle; }
+h1 { position: absolute; margin: 0; font-weight: 680; color: var(--paper); }
+h1 span { display: block; }
+h1 em {
+  font-style: normal;
+  background: linear-gradient(92deg, var(--lilac) 10%, var(--mint) 95%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.lede { position: absolute; margin: 0; color: var(--muted); font-weight: 420; }
+
+.chips { position: absolute; display: flex; gap: 10px; }
+.chip {
+  display: flex; align-items: center; gap: 8px;
+  height: 30px; padding: 0 12px;
+  border: 1px solid rgba(165, 166, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(165, 166, 255, 0.07);
+  font: 400 12.5px/1 "JetBrains Mono", monospace;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip svg { width: 14px; height: 14px; fill: var(--paper); flex: none; }
+.chip.npm b { color: var(--mint); font-weight: 500; }
+
+/* Mock Paseo surfaces (dark theme, sample data). */
+.card {
+  position: absolute;
+  border: 1px solid var(--surface2);
+  border-radius: 14px;
+  background: var(--surface0);
+  color: var(--fg);
+  box-shadow: 0 0 0 1px rgba(165, 166, 255, 0.14), 0 24px 70px rgba(4, 4, 18, 0.7);
+  overflow: hidden;
+}
+.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.picker-head { padding: 14px 16px 10px; font-size: 15px; font-weight: 600; }
+.search {
+  display: flex; align-items: center; gap: 9px;
+  margin: 0 12px 8px; height: 38px; padding: 0 12px;
+  border: 1px solid var(--surface3); border-radius: 9px;
+  background: var(--surface1); color: var(--fg-muted); font-size: 14px;
+}
+.search .typed { color: var(--fg); }
+.search .caret { width: 1.5px; height: 17px; margin-left: -8px; background: var(--lilac); }
+.row { display: flex; gap: 11px; margin: 0 6px; padding: 9px 10px; border-radius: 8px; color: var(--fg-muted); }
+.row.active { background: var(--surface2); box-shadow: inset 0 0 0 1.5px var(--violet); }
+.row .icon { margin-top: 2px; }
+.row .label { color: var(--fg); font-size: 14px; }
+.row .label code { font: 500 12.5px "JetBrains Mono", monospace; color: var(--lilac); margin-right: 6px; }
+.row .desc { margin-top: 3px; font-size: 12.5px; color: var(--fg-faint); }
+.row .desc i { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: var(--state, var(--fg-faint)); font-style: normal; }
+
+.composer { padding: 12px; }
+.pill {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 7px 10px 7px 10px; border: 1px solid var(--surface3); border-radius: 10px;
+  background: var(--surface1); color: var(--fg-muted);
+}
+.pill.glow { box-shadow: 0 0 0 1.5px var(--violet), 0 0 24px rgba(107, 108, 246, 0.45); }
+.pill .title { color: var(--fg); font-size: 13.5px; font-weight: 500; }
+.pill .sub { font-size: 12px; color: var(--fg-faint); margin-top: 2px; }
+.pill .x { margin-left: 6px; color: var(--fg-faint); font-size: 15px; }
+.prompt { padding: 14px 4px 18px; font-size: 15px; color: var(--fg); }
+.prompt .caret { display: inline-block; width: 1.5px; height: 17px; margin-left: 2px; vertical-align: -3px; background: var(--fg); }
+.toolbar { display: flex; align-items: center; gap: 8px; color: var(--fg-faint); font-size: 13px; }
+.toolbar .btn { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: var(--surface2); color: var(--fg-muted); }
+.toolbar .spacer { flex: 1; }
+.toolbar .send { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: var(--fg); color: var(--surface0); }
+
+.menu { padding: 6px; }
+.menu .item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; font-size: 14px; color: var(--fg); }
+.menu .item .icon { color: var(--fg-muted); }
+.menu .item.active { background: var(--surface2); box-shadow: inset 0 0 0 1.5px var(--violet); }
+
+.snapshot { padding: 16px 18px; font: 400 13px/1.62 "JetBrains Mono", monospace; color: var(--fg-muted); white-space: pre; }
+.snapshot b { color: var(--fg); font-weight: 600; }
+.snapshot .k { color: var(--lilac); }
+.snapshot .url { color: var(--mint); }
+.card-label { display: flex; align-items: center; gap: 8px; padding: 11px 16px; border-bottom: 1px solid var(--surface2); font-size: 12.5px; color: var(--fg-faint); }
+
+.term { padding: 16px 18px; font: 400 13.5px/1.75 "JetBrains Mono", monospace; color: var(--fg-muted); white-space: pre; }
+.term .p { color: var(--mint); }
+.term .s { color: var(--lilac); }
+.term .c { color: var(--fg-faint); }
+.dots { display: flex; gap: 7px; padding: 12px 14px 0; }
+.dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--surface3); }
+
+.flow { position: absolute; display: flex; align-items: center; gap: 0; }
+.node {
+  width: 168px; padding: 14px 14px 13px; border-radius: 12px;
+  border: 1px solid rgba(165, 166, 255, 0.22); background: rgba(21, 23, 41, 0.92);
+  font-size: 15px; font-weight: 600; color: var(--paper);
+}
+.node small { display: block; margin-top: 6px; font-size: 12.5px; font-weight: 420; color: var(--muted); }
+.node.key { border-color: var(--mint); box-shadow: 0 0 22px rgba(126, 224, 195, 0.22); }
+.link { width: 46px; height: 2px; background: repeating-linear-gradient(90deg, var(--lilac) 0 6px, transparent 6px 11px); }
+
+.icon-tile { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 22%; overflow: hidden; background: #12132a; }
+.icon-tile .mark { position: relative; width: 62%; }

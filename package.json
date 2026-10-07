@@ -1,0 +1,52 @@
+{
+  "name": "@yannelli/paseo-linear-plugin",
+  "version": "0.1.0",
+  "description": "Attach Linear issues to Paseo agent prompts",
+  "license": "Apache-2.0",
+  "type": "module",
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "linear"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yannelli/paseo-linear-plugin.git"
+  },
+  "homepage": "https://github.com/yannelli/paseo-linear-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/yannelli/paseo-linear-plugin/issues"
+  },
+  "files": [
+    "paseo-plugin.json",
+    "OVERVIEW.md",
+    "NOTICE",
+    "index.client.ts",
+    "index.server.ts",
+    "server/",
+    "shared/"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run && node --test test/*.test.mjs",
+    "check": "npm run typecheck && npm test",
+    "release:dry-run": "node scripts/release.mjs --dry-run"
+  },
+  "devDependencies": {
+    "@getpaseo/plugin": "0.10.3",
+    "@tanstack/react-query": "^5.90.11",
+    "@types/node": "^24.19.1",
+    "@types/react": "~19.2.0",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.6",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "id": "linear",
+  "description": "Attach Linear issues to agent prompts",
+  "requirements": {
+    "paseo": ">=0.9.0"
+  }
+}
