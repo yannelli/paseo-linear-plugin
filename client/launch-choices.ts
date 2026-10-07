@@ -4,6 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import type { IssueDetail } from "../shared/linear";
 import type { AgentAction, LinearSettings } from "../shared/settings";
 import { type AgentPicks, resolveAgent } from "./agent-options";
+import { loadAgentPreferences } from "./agent-preferences";
 import {
   defaultProjectId,
   type Placement,
@@ -52,6 +53,7 @@ export function useLaunchChoices(input: {
   const [projectChoice, setProjectChoice] = useState<string | null>(null);
   const [placementChoice, setPlacementChoice] = useState<Placement | null>(null);
   const [picks, setPicks] = useState<AgentPicks>(NO_PICKS);
+  const [remembered] = useState(loadAgentPreferences);
   const projectId =
     projectChoice ??
     defaultProjectId({ target, teamId: issue.team.id, settings, projects: projects.data });
@@ -75,7 +77,7 @@ export function useLaunchChoices(input: {
     settings.launch.isolation,
   );
   const agents = providers.data ?? [];
-  const agent = resolveAgent(agents, picks, settings.launch.provider);
+  const agent = resolveAgent(agents, picks, settings.launch.provider, remembered);
   const chooseProject = useCallback((value: string) => {
     setProjectChoice(value);
     setPlacementChoice(null);
