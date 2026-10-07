@@ -1,7 +1,7 @@
 {
   "id": "linear",
-  "description": "Attach Linear issues to agent prompts",
+  "description": "Browse, triage, and create Linear issues, and start agents that implement or review them",
   "requirements": {
-    "paseo": ">=0.9.0"
+    "paseo": ">=0.10.0"
   }
 }

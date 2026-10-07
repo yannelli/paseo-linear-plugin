@@ -1,7 +1,16 @@
+import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { createCredentialStore } from "../server/credentials";
+import { createLinearGraphql } from "../server/graphql";
 import { createLinearIssueSearch } from "../server/linear";
+import { createLinearService, issueFilter } from "../server/queries";
+import type { IssueDetail } from "../shared/linear";
+import { composePrompt } from "../shared/prompts";
+import { emptyProjectConfig, linearSettings } from "../shared/settings";
 
 const issue = {
   id: "issue-uuid",
@@ -129,7 +138,213 @@ describe("Linear issue search", () => {
 
   it("requires a daemon-side API key", () => {
     expect(() => createLinearIssueSearch({ apiKey: "" })).toThrow(
-      "Set LINEAR_API_KEY in the daemon environment",
+      "Connect Linear: add an API key in Linear settings",
     );
+  });
+});
+
+const state = { id: "state-1", name: "Todo", type: "unstarted", color: "#e2e2e2", position: 1 };
+const detail: IssueDetail = {
+  id: "issue-uuid",
+  identifier: "ENG-123",
+  title: "Plugin attachments",
+  url: issue.url,
+  branchName: "eng-123-plugin-attachments",
+  priority: 2,
+  priorityLabel: "High",
+  updatedAt: "2026-10-01T00:00:00.000Z",
+  state,
+  assignee: null,
+  team: { id: "team-1", key: "ENG", name: "Engineering" },
+  project: null,
+  labels: [],
+  description: "Let extensions attach external context.",
+  createdAt: "2026-09-01T00:00:00.000Z",
+  creator: null,
+  parent: null,
+  children: [],
+  comments: [
+    {
+      id: "comment-1",
+      body: "Check the composer first.",
+      createdAt: "2026-09-02T00:00:00.000Z",
+      user: { id: "u1", name: "Ada Lovelace", displayName: "ada", avatarUrl: null },
+    },
+  ],
+  attachments: [],
+};
+
+describe("agent prompts", () => {
+  const settings = linearSettings.schema.parse({});
+  const project = emptyProjectConfig({ projectId: "p1", displayName: "Shop", rootPath: "/shop" });
+
+  it("renders the built-in implement prompt with the issue snapshot and branch", () => {
+    const prompt = composePrompt({
+      action: "implement",
+      issue: detail,
+      settings,
+      project: null,
+      includeComments: true,
+      extraInstructions: "",
+    });
+    expect(prompt).toContain("You are working on Linear issue ENG-123: Plugin attachments");
+    expect(prompt).toContain("on branch eng-123-plugin-attachments");
+    expect(prompt).toContain("- ada (2026-09-02): Check the composer first.");
+  });
+
+  it("appends project text, instructions, numbered steps, and one-off instructions", () => {
+    const prompt = composePrompt({
+      action: "review",
+      issue: detail,
+      settings,
+      project: {
+        ...project,
+        instructions: "Use pnpm.",
+        steps: ["Run pnpm test", "", " Open a draft PR "],
+        review: { mode: "append", text: "Focus on {{identifier}} security." },
+      },
+      includeComments: false,
+      extraInstructions: "Be brief.",
+    });
+    expect(prompt.startsWith("Review the work for Linear issue ENG-123: Plugin attachments")).toBe(
+      true,
+    );
+    expect(prompt).toContain("Focus on ENG-123 security.");
+    expect(prompt).toContain("Project instructions:\nUse pnpm.");
+    expect(prompt).toContain("Project steps:\n1. Run pnpm test\n2. Open a draft PR");
+    expect(prompt.endsWith("Additional instructions:\nBe brief.")).toBe(true);
+    expect(prompt).not.toContain("Comments (oldest first)");
+  });
+
+  it("keeps the issue snapshot when a replacement template omits it", () => {
+    const prompt = composePrompt({
+      action: "implement",
+      issue: detail,
+      settings,
+      project: { ...project, implement: { mode: "replace", text: "Fix {{identifier}} now." } },
+      includeComments: false,
+      extraInstructions: "",
+    });
+    expect(prompt.startsWith("Fix ENG-123 now.\n\nLinear issue ENG-123: Plugin attachments")).toBe(
+      true,
+    );
+    expect(prompt).not.toContain("You are working on");
+  });
+
+  it("parses empty settings into complete defaults", () => {
+    expect(settings).toEqual({
+      templates: { implement: "", review: "" },
+      launch: {
+        provider: "",
+        isolation: "worktree",
+        includeComments: true,
+        moveToStarted: true,
+        assignToMe: true,
+      },
+      projects: [],
+    });
+  });
+});
+
+describe("issue filters", () => {
+  it("combines team, assignee, status, and text clauses", () => {
+    expect(
+      issueFilter({
+        teamId: "team-1",
+        assignee: "me",
+        status: "active",
+        query: " crash ",
+        after: null,
+      }),
+    ).toEqual({
+      and: [
+        { team: { id: { eq: "team-1" } } },
+        { assignee: { isMe: { eq: true } } },
+        { state: { type: { in: ["unstarted", "started"] } } },
+        {
+          or: [
+            { title: { containsIgnoreCase: "crash" } },
+            { description: { containsIgnoreCase: "crash" } },
+          ],
+        },
+      ],
+    });
+    expect(
+      issueFilter({ teamId: null, assignee: "anyone", status: "all", query: "", after: null }),
+    ).toBeNull();
+  });
+
+  it("jumps straight to an issue key before listing", async () => {
+    const queries: string[] = [];
+    const service = createLinearService(async (query, variables) => {
+      queries.push(
+        query.includes("PaseoLinearIssueDetail") ? `detail:${String(variables?.id)}` : "list",
+      );
+      return {
+        issue: {
+          ...detail,
+          labels: { nodes: [] },
+          children: { nodes: [] },
+          comments: { nodes: [] },
+          attachments: { nodes: [] },
+        },
+      };
+    });
+    const result = await service.listIssues({
+      teamId: null,
+      assignee: "me",
+      status: "active",
+      query: "eng-123",
+      after: null,
+    });
+    expect(queries).toEqual(["detail:ENG-123"]);
+    expect(result.issues.map((entry) => entry.identifier)).toEqual(["ENG-123"]);
+  });
+});
+
+describe("Linear GraphQL transport", () => {
+  it("reports GraphQL errors sent with HTTP 400", async () => {
+    await expect(
+      withLinearServer(
+        (_request, response) => {
+          response.writeHead(400, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ errors: [{ message: "Variable $id is invalid" }] }));
+        },
+        (endpoint) =>
+          createLinearGraphql({ apiKey: "lin_api_test", endpoint })("query { viewer { id } }"),
+      ),
+    ).rejects.toThrow("Variable $id is invalid");
+  });
+
+  it("describes a rejected key without echoing it", async () => {
+    await expect(
+      withLinearServer(
+        (_request, response) => {
+          response.writeHead(401, { "Content-Type": "application/json" });
+          response.end(JSON.stringify({ errors: [{ message: "Authentication required" }] }));
+        },
+        (endpoint) =>
+          createLinearGraphql({ apiKey: "lin_api_secret", endpoint })("query { viewer { id } }"),
+      ),
+    ).rejects.toThrow("Linear rejected the API key");
+  });
+});
+
+describe("credential store", () => {
+  it("prefers the saved key, writes it owner-only, and falls back to the environment", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "paseo-linear-"));
+    try {
+      const file = path.join(directory, "nested", "credentials.json");
+      const store = createCredentialStore({ file, env: { LINEAR_API_KEY: "lin_api_env" } });
+      expect(await store.resolve()).toEqual({ apiKey: "lin_api_env", source: "environment" });
+      await store.save(" lin_api_saved ");
+      expect(await store.resolve()).toEqual({ apiKey: "lin_api_saved", source: "file" });
+      expect(JSON.parse(await readFile(file, "utf8"))).toEqual({ apiKey: "lin_api_saved" });
+      if (process.platform !== "win32") expect((await stat(file)).mode & 0o777).toBe(0o600);
+      await store.clear();
+      expect(await store.resolve()).toEqual({ apiKey: "lin_api_env", source: "environment" });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
