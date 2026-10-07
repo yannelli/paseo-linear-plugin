@@ -7,6 +7,7 @@ A Paseo plugin for Linear. It adds a Linear screen and a workspace panel where y
 - Browse issues in a list next to the issue view. Search and filter the list, and change its sort order.
 - Nest sub-issues under their parent. Breadcrumbs show the parent chain of an issue.
 - Read descriptions and comments as Markdown.
+- Edit the description in place. It saves as you type. Check off task list items without opening the editor.
 - Change the status, priority, and assignee. Add comments and create issues.
 - Start an agent or a review from an issue. Choose the prompt, agent, model, effort, project, and where the agent runs.
 - Use a different Linear key for a Paseo project.
@@ -87,6 +88,8 @@ The issue header shows breadcrumbs: the team, the parent chain, then the issue, 
 
 - Select the status, priority, or assignee chip to change it.
 - Descriptions and comments show as Markdown: headings, lists, task lists, code, quotes, tables, and links.
+- Select the pencil next to **Description** to edit it as Markdown. The plugin saves about one second after you stop typing, and when you leave the box. The line under the box shows **Saving…**, then **Saved to Linear**. If a save fails, it shows **Could not save** and a **Retry** button. **Done** (or Escape) closes the editor only after Linear accepts the text.
+- Select a task list checkbox in the description to check or uncheck it. The plugin changes only that box in the Markdown and saves it to Linear. If the save fails, the issue reloads from Linear.
 - Add a comment in the **Activity** section.
 - The header buttons refresh the issue, copy its branch name, and open it in Linear.
 - Select **New issue**, or run **Linear: Create issue**, to create an issue. Set the team, status, priority, assignee, title, and a Markdown description.
@@ -137,6 +140,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 | `client/browser.tsx` | App | Screen and panel: picks the key, then shows the list, the issue, or the agent setup page |
 | `client/issue-list.tsx`, `client/issue-row.tsx`, `client/issue-tree.ts` | App | Search, filters, sort, rows, status groups, and sub-issue nesting |
 | `client/issue-detail.tsx`, `client/issue-sections.tsx`, `client/breadcrumbs.tsx` | App | Issue view: properties, breadcrumbs, sub-issues, links, agents, and comments |
+| `client/issue-description.tsx`, `client/autosave.ts` | App | Description editor, task list checkboxes, and debounced saves |
 | `client/markdown.tsx` | App | Renders Markdown |
 | `client/launch.tsx`, `client/launch-fields.tsx`, `client/launch-choices.ts`, `client/launch-plan.ts`, `client/agent-options.ts` | App | Agent setup page, Run in options, and agent start |
 | `client/model-browser.tsx`, `client/provider-icon.tsx` | App | Model picker and provider icons |
@@ -149,7 +153,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 | `shared/issues.ts` | Both | The `issues.search` RPC and the composer attachment source |
 | `shared/settings.ts` | Both | Settings schema: templates, agent defaults, and project settings |
 | `shared/prompts.ts` | Both | Default templates and the issue snapshot |
-| `shared/markdown.ts` | Both | Markdown parser |
+| `shared/markdown.ts` | Both | Markdown parser and task list toggle |
 | `server/handlers.ts` | Daemon | RPC handlers, key lookup, and cache use |
 | `server/credentials.ts` | Daemon | Key file and key order |
 | `server/cache.ts` | Daemon | Response cache in memory |
@@ -170,7 +174,7 @@ npm run check
 paseo plugin add "$PWD"
 ```
 
-After you edit the source, run `paseo plugin reload linear`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser, the agent options, and the release scripts. They use a local GraphQL server and do not call Linear.
+After you edit the source, run `paseo plugin reload linear`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser and task list toggle, the description autosave, the agent options, and the release scripts. They use a local GraphQL server and do not call Linear.
 
 ## Graphics
 

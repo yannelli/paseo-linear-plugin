@@ -16,6 +16,7 @@ To use a different Linear key for one Paseo project, add it under **Project keys
 - Select **Sub-issues** to nest sub-issues under their parent. The breadcrumbs above an issue show its team and parent chain.
 - Change the status, priority, and assignee. Add comments, or create an issue.
 - Descriptions and comments show as Markdown.
+- Edit the description in place. It saves to Linear about one second after you stop typing, and the line under the editor confirms each save. Select a task list checkbox to check or uncheck it without opening the editor.
 - `/linear` opens the panel. `/linear ENG-123` opens an issue.
 
 ## Start an agent

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type MarkdownInline, parseMarkdown, safeUrl } from "../shared/markdown";
+import {
+  type MarkdownInline,
+  parseMarkdown,
+  safeUrl,
+  taskItems,
+  toggleTask,
+} from "../shared/markdown";
 
 const text = (value: string) => ({ type: "text", text: value });
 const code = (value: string) => ({ type: "code", text: value });
@@ -277,5 +283,52 @@ describe("Linear description", () => {
         items: [item(para(text("one"))), item(para(text("two")))],
       },
     ]);
+  });
+});
+
+describe("toggleTask", () => {
+  const states = (source: string) => taskItems(parseMarkdown(source)).map((item) => item.checked);
+
+  it("numbers tasks in document order, through nested lists and quotes", () => {
+    const source = "- [ ] a\n  - [x] b\n- plain\n> - [ ] c\n>   1. [X] d";
+    expect(states(source)).toEqual([false, true, false, true]);
+  });
+
+  it("flips only the box character", () => {
+    expect(toggleTask("- [ ] todo\n- [x] done", 0)).toBe("- [x] todo\n- [x] done");
+    expect(toggleTask("- [ ] todo\n- [x] done", 1)).toBe("- [ ] todo\n- [ ] done");
+    expect(toggleTask("* [X] **bold** text", 0)).toBe("* [ ] **bold** text");
+    expect(toggleTask("3) [ ] ordered", 0)).toBe("3) [x] ordered");
+  });
+
+  it("flips the right one of two identical items", () => {
+    expect(toggleTask("- [ ] same\n- [ ] same", 1)).toBe("- [ ] same\n- [x] same");
+  });
+
+  it("reaches tasks in nested lists and quotes", () => {
+    const source = "- [ ] a\n  - [x] b\n> - [ ] c\n>   1. [X] d";
+    expect(toggleTask(source, 1)).toBe("- [ ] a\n  - [ ] b\n> - [ ] c\n>   1. [X] d");
+    expect(toggleTask(source, 2)).toBe("- [ ] a\n  - [x] b\n> - [x] c\n>   1. [X] d");
+    expect(toggleTask(source, 3)).toBe("- [ ] a\n  - [x] b\n> - [ ] c\n>   1. [ ] d");
+  });
+
+  it("skips task syntax inside fenced code", () => {
+    const source = "```\n- [ ] code\n```\n- [ ] real\n  ```\n  - [ ] nested code\n  ```\n- [ ] last";
+    expect(states(source)).toEqual([false, false]);
+    expect(toggleTask(source, 0)).toBe(source.replace("- [ ] real", "- [x] real"));
+    expect(toggleTask(source, 1)).toBe(source.replace("- [ ] last", "- [x] last"));
+  });
+
+  it("keeps CRLF line endings", () => {
+    expect(toggleTask("intro\r\n\r\n- [ ] a\r\n- [ ] b\r\n", 1)).toBe(
+      "intro\r\n\r\n- [ ] a\r\n- [x] b\r\n",
+    );
+  });
+
+  it("returns null when the task does not exist", () => {
+    expect(toggleTask("- [ ] only", 1)).toBeNull();
+    expect(toggleTask("- [ ] only", -1)).toBeNull();
+    expect(toggleTask("- [ ] only", 0.5)).toBeNull();
+    expect(toggleTask("no tasks here", 0)).toBeNull();
   });
 });

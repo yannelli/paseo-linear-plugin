@@ -1,8 +1,22 @@
 import { openExternalUrl } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { type ReactNode, useCallback, useMemo } from "react";
-import { Platform, ScrollView, type StyleProp, Text, type TextStyle, View } from "react-native";
-import { type MarkdownBlock, type MarkdownInline, parseMarkdown } from "../shared/markdown";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  type StyleProp,
+  Text,
+  type TextStyle,
+  View,
+} from "react-native";
+import {
+  type MarkdownBlock,
+  type MarkdownInline,
+  type MarkdownListItem,
+  parseMarkdown,
+  taskItems,
+} from "../shared/markdown";
 import type { Theme } from "./ui";
 
 type ListBlock = Extract<MarkdownBlock, { type: "list" }>;
@@ -73,10 +87,19 @@ type Styles = ReturnType<typeof createStyles>;
 
 // `s` styles the current blocks. `quoted` is the muted context for blockquotes; inside a
 // quote it is unset, so nested quotes reuse the current (already muted) context.
+// `tasks` maps each task item to its `taskItems` ordinal when checkboxes are pressable.
 interface Context {
   s: Styles;
   quoted?: Context;
+  tasks?: TaskToggles;
 }
+
+interface TaskToggles {
+  ordinals: Map<MarkdownListItem, number>;
+  onToggle(ordinal: number): void;
+}
+
+const CHECKBOX_HIT_SLOP = 8;
 
 function Link(props: { url: string; style: StyleProp<TextStyle>; children: ReactNode }) {
   const { url } = props;
@@ -121,8 +144,37 @@ function renderBlocks(blocks: MarkdownBlock[], ctx: Context): ReactNode[] {
   return blocks.map((block, index) => <Block key={index} block={block} ctx={ctx} />);
 }
 
-function ListMarker(props: { list: ListBlock; index: number; checked: boolean | null; s: Styles }) {
-  const { list, index, checked, s } = props;
+function TaskBox(props: { checked: boolean; ordinal: number; tasks: TaskToggles; s: Styles }) {
+  const { checked, ordinal, tasks } = props;
+  const { onToggle } = tasks;
+  const toggle = useCallback(() => onToggle(ordinal), [onToggle, ordinal]);
+  const a11yState = useMemo(() => ({ checked }), [checked]);
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={a11yState}
+      accessibilityLabel={checked ? "Uncheck item" : "Check item"}
+      hitSlop={CHECKBOX_HIT_SLOP}
+      onPress={toggle}
+    >
+      <Icon name={checked ? "SquareCheck" : "Square"} size={14} color={props.s.ink} />
+    </Pressable>
+  );
+}
+
+function ListMarker(props: {
+  list: ListBlock;
+  item: MarkdownListItem;
+  index: number;
+  ctx: Context;
+}) {
+  const { list, item, index, ctx } = props;
+  const { s, tasks } = ctx;
+  const { checked } = item;
+  const ordinal = tasks?.ordinals.get(item);
+  if (checked !== null && tasks && ordinal !== undefined) {
+    return <TaskBox checked={checked} ordinal={ordinal} tasks={tasks} s={s} />;
+  }
   if (checked !== null) {
     return <Icon name={checked ? "SquareCheck" : "Square"} size={14} color={s.ink} />;
   }
@@ -140,7 +192,7 @@ function List({ list, ctx }: { list: ListBlock; ctx: Context }) {
       {list.items.map((item, index) => (
         <View key={index} style={s.item}>
           <View style={s.marker}>
-            <ListMarker list={list} index={index} checked={item.checked} s={s} />
+            <ListMarker list={list} item={item} index={index} ctx={ctx} />
           </View>
           <View style={s.itemBody}>{renderBlocks(item.children, ctx)}</View>
         </View>
@@ -209,7 +261,11 @@ function Block({ block, ctx }: { block: MarkdownBlock; ctx: Context }) {
         </View>
       );
     case "blockquote":
-      return <View style={s.quote}>{renderBlocks(block.children, ctx.quoted ?? ctx)}</View>;
+      return (
+        <View style={s.quote}>
+          {renderBlocks(block.children, ctx.quoted ? { ...ctx.quoted, tasks: ctx.tasks } : ctx)}
+        </View>
+      );
     case "list":
       return <List list={block} ctx={ctx} />;
     case "table":
@@ -224,17 +280,23 @@ export interface MarkdownProps {
   source: string;
   compact?: boolean;
   muted?: boolean;
+  /** Makes task checkboxes pressable. Gets the item's ordinal in `taskItems` order. */
+  onToggleTask?(ordinal: number): void;
 }
 
 export function Markdown(props: MarkdownProps) {
   const { colors } = props.theme;
   const compact = props.compact === true;
   const muted = props.muted === true;
+  const { onToggleTask } = props;
   const blocks = useMemo(() => parseMarkdown(props.source), [props.source]);
   const ctx = useMemo<Context>(() => {
     const quoted: Context = { s: createStyles(colors, compact, true) };
-    return { s: muted ? quoted.s : createStyles(colors, compact, false), quoted };
-  }, [colors, compact, muted]);
+    const tasks = onToggleTask
+      ? { ordinals: new Map(taskItems(blocks).map((item, n) => [item, n])), onToggle: onToggleTask }
+      : undefined;
+    return { s: muted ? quoted.s : createStyles(colors, compact, false), quoted, tasks };
+  }, [colors, compact, muted, blocks, onToggleTask]);
   if (blocks.length === 0) return null;
   return <View style={ctx.s.root}>{renderBlocks(blocks, ctx)}</View>;
 }

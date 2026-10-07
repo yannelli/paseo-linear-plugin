@@ -18,7 +18,7 @@ npm run check
 | Command | What it does |
 | --- | --- |
 | `npm run typecheck` | Type checks all TypeScript |
-| `npm test` | Runs the plugin tests (Linear client, key file, cache, handlers, sub-issue nesting, Markdown, agent options) and the release script tests |
+| `npm test` | Runs the plugin tests (Linear client, key file, cache, handlers, sub-issue nesting, Markdown and task list toggle, description autosave, agent options) and the release script tests |
 
 The tests use a local GraphQL server. They do not call Linear and do not need an API key.
 
