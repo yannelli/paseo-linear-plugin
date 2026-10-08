@@ -12,6 +12,7 @@ import {
   registerLive,
   toIssueMap,
 } from "../server/live";
+import { createKnowledge } from "../server/knowledge";
 import { createLaunchQueue, createMapStore } from "../server/stores";
 import { ExploreResultSchema, InitProposalSchema } from "../shared/live";
 
@@ -122,7 +123,7 @@ describe("internal agent runs", () => {
 
   it("builds strict schemas: all properties required, no extras, no defaults", () => {
     const init = strictJsonSchema(InitProposalSchema);
-    expect(init.required).toEqual(["instructions", "steps", "implement", "review"]);
+    expect(init.required).toEqual(["instructions", "steps", "implement", "review", "summary", "areas"]);
     expect(init.additionalProperties).toBe(false);
     expect(JSON.stringify(init)).not.toMatch(/"default"|"\$schema"/);
     const explore = JSON.stringify(strictJsonSchema(ExploreResultSchema));
@@ -151,6 +152,7 @@ describe("internal agent runs", () => {
       access: access as unknown as LinearAccess,
       maps,
       launches,
+      knowledge: createKnowledge(path.join(directory, "knowledge")),
       readSettings: async () => null,
     });
     const result = (await handlers.get("linear.live.explore")?.({ agentId: "a1", force: false }, { paseo })) as {

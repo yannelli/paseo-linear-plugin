@@ -79,7 +79,7 @@ function StatusChip(props: { theme: Theme; status: AgentStatus; provider: string
   );
 }
 
-function NowLine(props: { theme: Theme; event: ActivityEvent; live: boolean }) {
+function NowLine(props: { theme: Theme; event: ActivityEvent; live: boolean; offMap: string | null }) {
   const { theme, event } = props;
   const { colors } = theme;
   const tone = eventTone(theme, event);
@@ -106,6 +106,18 @@ function NowLine(props: { theme: Theme; event: ActivityEvent; live: boolean }) {
         tint: { ...StyleSheet.absoluteFillObject, borderRadius: 6, backgroundColor: tone, opacity: 0.14 },
         text: { color: props.live ? colors.foreground : colors.foregroundMuted, fontSize: 13 },
         detail: { flex: 1, color: colors.foregroundMuted, fontFamily: MONO, fontSize: 11 },
+        off: {
+          flexShrink: 0,
+          maxWidth: 220,
+          paddingHorizontal: 7,
+          paddingVertical: 2,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderStyle: "dashed",
+          borderColor: colors.statusWarning,
+          color: colors.statusWarning,
+          fontSize: 11,
+        },
       }) as const,
     [colors, tone, props.live],
   );
@@ -124,6 +136,11 @@ function NowLine(props: { theme: Theme; event: ActivityEvent; live: boolean }) {
           {event.detail}
         </Text>
       ) : null}
+      {props.offMap ? (
+        <Text numberOfLines={1} style={styles.off} accessibilityLabel={`Off the map, in ${props.offMap}`}>
+          {`Off the map · ${props.offMap}`}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -136,6 +153,8 @@ export function LiveHeader(props: {
   status: AgentStatus;
   provider: string;
   current: ActivityEvent | null;
+  /** Where the current file is when the agent works off the map. */
+  offMap: string | null;
   reduceMotion: boolean;
 }) {
   const { theme, issue, progress, owners } = props;
@@ -204,7 +223,12 @@ export function LiveHeader(props: {
       </View>
       {counts.length > 0 ? <Text style={styles.counts}>{counts.join(" · ")}</Text> : null}
       {props.current ? (
-        <NowLine theme={theme} event={props.current} live={props.status === "running"} />
+        <NowLine
+          theme={theme}
+          event={props.current}
+          live={props.status === "running"}
+          offMap={props.offMap}
+        />
       ) : null}
     </View>
   );

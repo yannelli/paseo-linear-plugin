@@ -3,6 +3,7 @@ import path from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { z } from "zod";
 import { relativePath } from "../shared/activity";
+import { knowledgeLines, liveProjectRpc, type ProjectKnowledge, resolvePaths, toAreaRef } from "../shared/knowledge";
 import { type IssueDetail, ISSUE_CARD_KIND } from "../shared/linear";
 import {
   ExploreResultSchema,
@@ -29,6 +30,7 @@ import {
   startInternalRun,
 } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
+import { type KnowledgeService, knowledgeFor } from "./knowledge";
 import { fileLinks } from "./links";
 import { subagentLogs } from "./subagent-logs";
 import type { LaunchQueue, MapStore } from "./stores";
@@ -97,8 +99,9 @@ export async function listDirectories(cwd: string, dirs: readonly string[]) {
   return results;
 }
 
-export function explorePrompt(issue: IssueDetail): string {
+export function explorePrompt(issue: IssueDetail, knowledge: ProjectKnowledge | null = null): string {
   const keys = [issue.identifier, ...issue.children.map((child) => child.identifier)];
+  const map = knowledgeLines(knowledge);
   return [
     `Map this repository for Linear issue ${issue.identifier}: ${issue.title}`,
     "",
@@ -106,6 +109,7 @@ export function explorePrompt(issue: IssueDetail): string {
     "",
     issueSnapshot(issue, { includeComments: false }),
     "",
+    ...(map.length > 0 ? [...map, ""] : []),
     "List the files an engineer will most likely read or change for this issue and each sub-issue.",
     `Include files that will probably be created, at their expected path. List at most ${MAX_EXPLORE_FILES} files.`,
     `Set "issue" to the sub-issue key the file belongs to, or ${issue.identifier} for the whole issue.`,
@@ -138,6 +142,7 @@ export interface LiveDependencies {
   access: LinearAccess;
   maps: MapStore;
   launches: LaunchQueue;
+  knowledge: KnowledgeService;
   readSettings(): Promise<LinearSettings | null>;
 }
 
@@ -159,7 +164,7 @@ export async function startLaunch(workspace: WorkspaceHandle, launch: LaunchInpu
 }
 
 export function registerLive(server: PluginServerContext, dependencies: LiveDependencies) {
-  const { access, maps, launches, readSettings } = dependencies;
+  const { access, maps, launches, knowledge, readSettings } = dependencies;
   const jobs = createJobStore<IssueMap>();
   const recovering = new Map<string, Promise<Job | null>>();
   const recoveredAt = new Map<string, number>();
@@ -230,6 +235,14 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
     return { links: await fileLinks(agent.cwd, files) };
   });
 
+  server.handle(liveProjectRpc, async ({ agentId, paths }, { paseo }) => {
+    const agent = await agentInfo(paseo, agentId);
+    const known = await knowledgeFor(paseo, knowledge, agent.projectId);
+    if (!known) return { areas: [], resolved: [] };
+    const resolved = [...resolvePaths(paths, known.files)].map(([from, to]) => ({ from, to }));
+    return { areas: known.areas.map(toAreaRef), resolved };
+  });
+
   server.handle(clearMapRpc, async ({ agentId }, { paseo }) => {
     const agent = await agentInfo(paseo, agentId);
     const identifier = agent.labels[AGENT_LABELS.issue];
@@ -267,6 +280,8 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
   interface ExploreTarget {
     identifier: string;
     keyScope: string | null;
+    /** Paseo project whose saved knowledge goes into the prompt. */
+    projectId: string | null;
     cwd: string;
     /** Opened only when a new run starts. */
     workspace: () => Promise<WorkspaceHandle>;
@@ -293,6 +308,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
       const issue = await linear.getIssue(identifier);
       const labels: Record<string, string> = { [AGENT_LABELS.explore]: identifier };
       if (target.keyScope) labels[AGENT_LABELS.project] = target.keyScope;
+      const known = await knowledgeFor(paseo, knowledge, target.projectId);
       const run = await startInternalRun({
         paseo,
         workspace: await target.workspace(),
@@ -300,7 +316,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
         provider: target.provider,
         effort: target.effort,
         title: `Explore ${identifier}`,
-        prompt: explorePrompt(issue),
+        prompt: explorePrompt(issue, known),
         labels,
         schema: ExploreResultSchema,
         timeoutMs: EXPLORE_TIMEOUT_MS,
@@ -326,6 +342,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
     const job = await ensureExplore(paseo, {
       identifier,
       keyScope: agent.labels[AGENT_LABELS.project] ?? null,
+      projectId: agent.projectId,
       cwd,
       workspace: async () =>
         workspaceId ? paseo.workspaces.ref(workspaceId) : paseo.workspaces.open(cwd),
@@ -344,6 +361,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
     const job = await ensureExplore(paseo, {
       identifier: input.identifier,
       keyScope: input.keyScope,
+      projectId: info.projectId,
       cwd: info.workspaceDirectory ?? info.projectRootPath,
       workspace: async () => workspace,
       provider: settings?.live.exploreProvider || input.agent.config.provider,

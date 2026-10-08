@@ -7,7 +7,7 @@ const MAX_MAPS = 200;
 /** A launch still waiting after this long is dropped, so a stale one never starts by surprise. */
 export const PENDING_LAUNCH_MAX_AGE_MS = 60 * 60_000;
 
-interface JsonFile<T> {
+export interface JsonFile<T> {
   read(): Promise<T>;
   /** Changes run one at a time, so a read, change, and write never interleave. */
   update<R>(change: (current: T) => { next: T; result: R }): Promise<R>;

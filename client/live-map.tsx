@@ -8,6 +8,7 @@ import {
   type MapZone,
   masonry,
   ZONE_GAP,
+  zoneAreaLabel,
 } from "../shared/map-model";
 import { NATIVE_DRIVER, type OwnerColors } from "./live-timeline";
 import type { AgentMarker } from "./live-agents";
@@ -197,7 +198,8 @@ function Zone(props: RepoMapProps & { zone: MapZone }) {
           opacity: 0.35,
         },
         header: { flexDirection: "row", alignItems: "center", gap: 6 },
-        dir: { flex: 1, color: colors.foregroundMuted, fontFamily: MONO, fontSize: 11 },
+        dir: { flexShrink: 1, color: colors.foregroundMuted, fontFamily: MONO, fontSize: 11 },
+        area: { flex: 1, color: colors.foregroundMuted, fontSize: 11, opacity: 0.8 },
         count: { color: hot ? colors.foreground : colors.foregroundMuted, fontSize: 11 },
         tiles: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
       }) as const,
@@ -207,6 +209,7 @@ function Zone(props: RepoMapProps & { zone: MapZone }) {
   let count: string | null = null;
   if (zone.predicted > 0) count = `${zone.hits}/${zone.predicted}${off > 0 ? ` +${off} off` : ""}`;
   else if (off > 0) count = `${off} off the map`;
+  const area = zoneAreaLabel(zone);
   return (
     <View style={styles.zone}>
       {hot ? <View pointerEvents="none" style={styles.ring} /> : null}
@@ -218,6 +221,9 @@ function Zone(props: RepoMapProps & { zone: MapZone }) {
         />
         <Text numberOfLines={1} style={styles.dir}>
           {zone.dir || "./"}
+        </Text>
+        <Text numberOfLines={1} style={styles.area}>
+          {area ?? ""}
         </Text>
         {count ? <Text style={styles.count}>{count}</Text> : null}
       </View>

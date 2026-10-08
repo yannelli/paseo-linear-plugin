@@ -3,6 +3,7 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tansta
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessibilityInfo, Platform } from "react-native";
 import type { DirTouch, FileTouch, TimelineItemLike } from "../shared/activity";
+import { type AreaRef, liveProjectRpc, MAX_RESOLVE_PATHS } from "../shared/knowledge";
 import type { IssueDetail } from "../shared/linear";
 import type { FileLink } from "../shared/links";
 import {
@@ -240,6 +241,8 @@ export function ownerColors(issue: IssueDetail, accent: string): OwnerColors {
 // runs, and slowly while there is no map, since a launch can start a job after this mounts.
 export interface LiveMap {
   map: IssueMap;
+  /** Services, packages, and main folders of the agent's project, from its saved knowledge. */
+  areas: readonly AreaRef[];
   stored: boolean;
   /** The stored map has been read once, so the map no longer swaps from the fallback. */
   ready: boolean;
@@ -282,13 +285,14 @@ export function useLiveMap(
   const refresh = useCallback(() => void queries.invalidateQueries({ queryKey: ["linear", "live"] }), [queries]);
   const clearMap = useRpc(clearMapRpc);
   const clear = useMutation({ mutationFn: () => clearMap({ agentId }), onSettled: refresh });
-  const fallback = useMemo(() => semanticMap(issue), [issue]);
+  const project = useProjectKnowledge(agentId, issue);
   const stored = query.data?.map ?? null;
   const failure = explore.error ?? clear.error ?? query.error;
   return {
-    map: stored ?? fallback,
+    map: stored ?? project.fallback,
+    areas: project.areas,
     stored: stored !== null,
-    ready: query.data !== undefined || query.isError,
+    ready: (query.data !== undefined || query.isError) && project.ready,
     job: query.data?.job ?? null,
     starting: explore.isPending,
     error: failure ? errorMessage(failure) : null,
@@ -299,6 +303,32 @@ export function useLiveMap(
   };
 }
 
+const NO_AREAS: readonly AreaRef[] = [];
+
+/** The project's areas, and the ticket-text map with its paths matched to real files. */
+function useProjectKnowledge(agentId: string, issue: IssueDetail) {
+  const read = useRpc(liveProjectRpc);
+  const base = useMemo(() => semanticMap(issue), [issue]);
+  const paths = useMemo(
+    () => base.files.map((file) => file.path).slice(0, MAX_RESOLVE_PATHS).sort(),
+    [base],
+  );
+  const query = useQuery({
+    queryKey: ["linear", "live", "project", agentId, paths],
+    queryFn: () => read({ agentId, paths }),
+    staleTime: 5 * 60_000,
+    // Without knowledge the map still works, so a failure shows it at once.
+    retry: false,
+  });
+  const { data } = query;
+  const fallback = useMemo(() => {
+    if (!data) return base;
+    const resolved = new Map(data.resolved.map((entry) => [entry.from, entry.to]));
+    return semanticMap(issue, new Date(base.createdAt), { resolved, areas: data.areas });
+  }, [issue, base, data]);
+  return { fallback, areas: data?.areas ?? NO_AREAS, ready: data !== undefined || query.isError };
+}
+
 const NO_LISTING: ReadonlyMap<string, readonly string[]> = new Map();
 
 export function useMapModel(
@@ -306,6 +336,7 @@ export function useMapModel(
   files: readonly MapFile[],
   touches: readonly FileTouch[],
   explored: readonly DirTouch[],
+  areas: readonly AreaRef[] = NO_AREAS,
 ): MapModel & { ready: boolean } {
   const list = useRpc(listFilesRpc);
   const dirs = useMemo(
@@ -325,8 +356,8 @@ export function useMapModel(
   }, [listing.data]);
   const ready = dirs.length === 0 || listing.data !== undefined || listing.isError;
   return useMemo(
-    () => ({ ...buildMapModel(files, touches, byDir, explored), ready }),
-    [files, touches, byDir, explored, ready],
+    () => ({ ...buildMapModel(files, touches, byDir, explored, areas), ready }),
+    [files, touches, byDir, explored, areas, ready],
   );
 }
 

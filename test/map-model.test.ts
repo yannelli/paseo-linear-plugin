@@ -65,6 +65,7 @@ describe("zone columns", () => {
     touched: 0,
     hits: 0,
     explored: "none",
+    area: null,
   });
   const columnOf = (groups: MapZone[][]) =>
     Object.fromEntries(groups.flatMap((group, index) => group.map((entry) => [entry.dir, index])));

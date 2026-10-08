@@ -1,6 +1,7 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { McpHttpServerSchema, ToolPolicySchema } from "./agent-tools";
+import { type AreaRef, areasIn } from "./knowledge";
 import { IssueCardSchema, WorkflowStateSchema } from "./linear";
 
 // Contracts for Linear Live, todo sync, and project setup. Agents the plugin starts for itself
@@ -40,6 +41,9 @@ export const InitProposalSchema = z.object({
   steps: z.array(z.string()).default([]),
   implement: z.string().default(""),
   review: z.string().default(""),
+  /** Saved to the project knowledge at once; not part of the prompt proposal. */
+  summary: z.string().default(""),
+  areas: z.array(z.object({ path: z.string(), summary: z.string() })).max(80).default([]),
 });
 export type InitProposal = z.infer<typeof InitProposalSchema>;
 
@@ -194,18 +198,30 @@ export interface SemanticIssue {
   children: readonly { identifier: string; title: string }[];
 }
 
+/** What project knowledge adds to a ticket-text map. */
+export interface MapHints {
+  /** Ticket paths matched to real files, such as "linear.ts" to "server/linear.ts". */
+  resolved?: ReadonlyMap<string, string>;
+  /** A service or package the text names puts its folder on the map. */
+  areas?: readonly AreaRef[];
+}
+
 // Linear sends sub-issue titles but not their descriptions, so a path in the parent's text
 // belongs to the sub-issue its line names and otherwise to the parent.
-export function semanticMap(issue: SemanticIssue, now = new Date()): IssueMap {
+export function semanticMap(issue: SemanticIssue, now = new Date(), hints: MapHints = {}): IssueMap {
   const owners = new Map<string, string>();
   const childKeys = new Set(issue.children.map((child) => child.identifier.toUpperCase()));
+  const found = (text: string) => [
+    ...pathsIn(text).map((path) => hints.resolved?.get(path) ?? path),
+    ...areasIn(text, hints.areas ?? []).map((area) => area.path),
+  ];
   for (const child of issue.children) {
-    for (const path of pathsIn(child.title)) owners.set(path, child.identifier);
+    for (const path of found(child.title)) owners.set(path, child.identifier);
   }
   const lines = `${issue.title}\n${issue.description ?? ""}`.split("\n");
   for (const line of lines) {
     const named = (line.match(ISSUE_KEY) ?? []).find((key) => childKeys.has(key));
-    for (const path of pathsIn(line)) {
+    for (const path of found(line)) {
       if (!owners.has(path)) owners.set(path, named ?? issue.identifier);
     }
   }
