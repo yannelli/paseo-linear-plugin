@@ -1,7 +1,7 @@
 import type { PluginAgentSnapshot } from "@getpaseo/plugin";
 import { usePaseo } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
@@ -23,8 +23,8 @@ import { type Theme, usePressableStyle } from "./ui";
 // have their own timelines, and provider subagents, which only report what they were asked.
 
 const CHILD_LABEL = "paseo.parent-agent-id";
-const MAX_CHILDREN = 4;
-const CHILD_COLORS = ["#e879f9", "#38bdf8", "#facc15", "#fb7185"];
+const MAX_CHILDREN = 8;
+const CHILD_COLORS = ["#e879f9", "#38bdf8", "#facc15", "#fb7185", "#4ade80", "#f97316", "#818cf8", "#2dd4bf"];
 const POLL_MS = 10_000;
 const SUBAGENT_COLORS = ["#a78bfa", "#34d399", "#f97316", "#22d3ee", "#f472b6", "#a3e635", "#fbbf24", "#60a5fa"];
 // A transcript that has not grown for this long belongs to a subagent that stopped.
@@ -39,13 +39,24 @@ export interface ChildAgent {
   status: AgentStatus;
   cwd: string;
   color: string;
+  workspaceId?: string | null;
+  /** The issue it works on, from its Linear label or a key at the start of its title. */
+  issueKey?: string | null;
+}
+
+const LEADING_KEY = /^\s*([A-Za-z][A-Za-z0-9]*-\d+)\b/;
+
+/** The issue a child agent works on, such as ENG-42 for "ENG-42: Add the form". */
+export function childIssueKey(labels: Readonly<Record<string, string>> | undefined, title: string | null) {
+  const key = labels?.["linear.issue"] ?? LEADING_KEY.exec(title ?? "")?.[1] ?? null;
+  return key ? key.toUpperCase() : null;
 }
 
 export interface ChildView {
   agent: ChildAgent;
   activity: Activity | null;
-  /** Works in the parent's folder, so its files can go on the same map. */
-  sameFolder: boolean;
+  /** Works in the parent's folder or a worktree of the same project, so its paths fit the map. */
+  sameRepo: boolean;
   /** A provider subagent read from its transcript, which Paseo cannot open as an agent. */
   subagent?: boolean;
 }
@@ -67,7 +78,7 @@ export function subagentViews(logs: readonly SubagentLog[], cwd: string, checked
         color: SUBAGENT_COLORS[index % SUBAGENT_COLORS.length] ?? "#a78bfa",
       },
       activity: deriveActivity(log.items, cwd),
-      sameFolder: true,
+      sameRepo: true,
       subagent: true,
     };
   });
@@ -108,8 +119,50 @@ export function useChildAgents(agentId: string, polling: boolean): ChildAgent[] 
       status: agent.status as AgentStatus,
       cwd: agent.cwd,
       color: CHILD_COLORS[index % CHILD_COLORS.length] ?? "#38bdf8",
+      workspaceId: agent.workspaceId ?? null,
+      issueKey: childIssueKey(agent.labels, agent.title ?? null),
     }));
   }, [query.data]);
+}
+
+const projectOf = new Map<string, string | null>();
+
+/** The Paseo project of each workspace. A workspace never changes project, so each is read once. */
+export function useWorkspaceProjects(workspaceIds: readonly (string | null | undefined)[]) {
+  const paseo = usePaseo();
+  const ids = useMemo(
+    () => [...new Set(workspaceIds.filter((id): id is string => Boolean(id)))].sort(),
+    [workspaceIds],
+  );
+  const query = useQuery({
+    queryKey: ["linear", "live", "workspace-projects", ids],
+    queryFn: async () => {
+      await Promise.all(
+        ids
+          .filter((id) => !projectOf.has(id))
+          .map(async (id) => {
+            const handle = paseo.workspaces.ref(id);
+            const info = await handle.refresh().catch(() => null);
+            projectOf.set(id, info?.projectId ?? handle.projectId ?? null);
+          }),
+      );
+      return new Map(ids.map((id) => [id, projectOf.get(id) ?? null]));
+    },
+    enabled: ids.length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    placeholderData: keepPreviousData,
+  });
+  return query.data;
+}
+
+/** Both workspaces belong to one Paseo project, so a worktree's paths match the parent's. */
+export function sameProject(
+  projects: ReadonlyMap<string, string | null> | undefined,
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const first = a ? projects?.get(a) : null;
+  return Boolean(first) && first === (b ? projects?.get(b) : null);
 }
 
 export function sameFolder(a: string, b: string): boolean {
@@ -141,7 +194,7 @@ export function agentMarkers(input: {
   }
   for (const child of input.children) {
     const current = child.activity?.current;
-    if (child.agent.status !== "running" || !child.sameFolder || !current) continue;
+    if (child.agent.status !== "running" || !child.sameRepo || !current) continue;
     add(markers, current.paths, {
       key: child.agent.id,
       kind: "child",
@@ -279,7 +332,7 @@ export function AgentsList(props: {
         detail={props.current?.text ?? null}
         live={parentRunning}
       />
-      {props.childAgents.map(({ agent, activity, sameFolder: shared, subagent: subagentView }) => (
+      {props.childAgents.map(({ agent, activity, sameRepo: shared, subagent: subagentView }) => (
         <AgentRow
           key={agent.id}
           theme={theme}
@@ -314,7 +367,7 @@ export function AgentsList(props: {
 function mergeTouches(own: readonly FileTouch[], children: readonly ChildView[]): FileTouch[] {
   const merged = new Map(own.map((file) => [file.path, { ...file }]));
   for (const child of children) {
-    if (!child.sameFolder) continue;
+    if (!child.sameRepo) continue;
     for (const file of child.activity?.files ?? []) {
       const known = merged.get(file.path);
       if (!known) {
@@ -336,12 +389,16 @@ export function useLiveAgents(input: {
   theme: Theme;
   agentId: string;
   cwd: string;
+  workspaceId: string | null;
   status: AgentStatus;
   provider: string;
   activity: Activity;
 }) {
   const { theme, agentId, cwd, status, provider, activity } = input;
   const children = useChildAgents(agentId, status === "running");
+  const projects = useWorkspaceProjects(
+    useMemo(() => [input.workspaceId, ...children.map((child) => child.workspaceId)], [input.workspaceId, children]),
+  );
   const ids = useMemo(() => children.map((child) => child.id), [children]);
   const timelines = useAgentTimelines(ids);
   const logs = useSubagentLogs(
@@ -357,12 +414,12 @@ export function useLiveAgents(input: {
         return {
           agent,
           activity: timeline ? deriveActivity(timeline.items, agent.cwd) : null,
-          sameFolder: sameFolder(agent.cwd, cwd),
+          sameRepo: sameFolder(agent.cwd, cwd) || sameProject(projects, input.workspaceId, agent.workspaceId),
         };
       }),
       ...subViews,
     ],
-    [children, timelines, cwd, subViews],
+    [children, timelines, cwd, subViews, projects, input.workspaceId],
   );
   // Subagents with a transcript show as agents; the rest only report what they were asked.
   const subagents = useMemo(() => {
@@ -385,7 +442,7 @@ export function useLiveAgents(input: {
   const dirs = useMemo(
     (): DirTouch[] => [
       ...activity.dirs,
-      ...views.flatMap((view) => (view.sameFolder ? (view.activity?.dirs ?? []) : [])),
+      ...views.flatMap((view) => (view.sameRepo ? (view.activity?.dirs ?? []) : [])),
     ],
     [activity.dirs, views],
   );
@@ -408,6 +465,8 @@ export interface CursorAgent {
   color: string;
   provider: string | null;
   focus: AgentFocus | null;
+  /** Where it hovers when its focus is not on the graph: the issue it works on. */
+  home: AgentFocus | null;
   running: boolean;
   /** What it does now, such as "Read page.tsx". */
   caption: string | null;
@@ -434,6 +493,7 @@ export function cursorAgents(input: {
       color: input.theme.colors.accent,
       provider: input.provider,
       focus: activity.focus,
+      home: null,
       running: input.working,
       caption: input.working ? (activity.current?.text ?? null) : null,
       satellites: input.working ? input.subagents.filter((run) => run.status === "running").length : 0,
@@ -441,7 +501,7 @@ export function cursorAgents(input: {
   ];
   for (const child of input.children) {
     // Paths are relative to each agent's folder, so only agents in this folder fit the graph.
-    if (!child.sameFolder || !child.activity) continue;
+    if (!child.sameRepo) continue;
     const running = child.agent.status === "running";
     // Finished subagents can be many, so only working ones get a cursor.
     if (child.subagent && !running) continue;
@@ -451,9 +511,10 @@ export function cursorAgents(input: {
       label: child.agent.title,
       color: child.agent.color,
       provider: null,
-      focus: child.activity.focus,
+      focus: child.activity?.focus ?? null,
+      home: child.agent.issueKey ? { kind: "issue", key: child.agent.issueKey } : null,
       running,
-      caption: running ? (child.activity.current?.text ?? null) : null,
+      caption: running ? (child.activity?.current?.text ?? null) : null,
       satellites: 0,
     });
   }

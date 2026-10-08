@@ -38,6 +38,8 @@ export interface CursorProps {
   hover(id: string): Point | null;
   /** Canvas width, to keep the caption inside it. */
   width: number;
+  /** One over the graph zoom, so the cursor keeps its size on screen. */
+  inverse: Animated.AnimatedInterpolation<number>;
   reduce: boolean;
 }
 
@@ -259,7 +261,7 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.anchor, { transform: [{ translateX: motion.x }, { translateY: motion.y }] }]}
+      style={[styles.anchor, { transform: [{ translateX: motion.x }, { translateY: motion.y }, { scale: props.inverse }] }]}
     >
       <Animated.View style={styles.float}>
         {agent.running ? <Animated.View style={styles.halo} /> : null}

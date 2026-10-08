@@ -15,6 +15,7 @@ import { modeIcon, optionLabel } from "./agent-options";
 import { useKeyScope } from "./key-scope";
 import { type LaunchChoices, useLaunchChoices } from "./launch-choices";
 import { Chip, Field, Toggle } from "./launch-fields";
+import { GuidanceToggles, useProjectGuidance } from "./launch-guidance";
 import { linearPatch, type TargetWorkspace, useLaunchAgent } from "./launch-plan";
 import { ModelBrowser } from "./model-browser";
 import { PickerModal } from "./pickers";
@@ -157,6 +158,7 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
   // Null until the user types. Until then the prompt follows the template and options.
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const { projectConfig } = choices;
+  const { guidance, change: changeGuidance } = useProjectGuidance(choices.project, projectConfig);
   const generated = useMemo(
     () =>
       composePrompt({
@@ -166,8 +168,9 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
         project: projectConfig,
         includeComments,
         extraInstructions: "",
+        guidance,
       }),
-    [action, issue, settings, projectConfig, includeComments],
+    [action, issue, settings, projectConfig, includeComments, guidance],
   );
   const prompt = customPrompt ?? generated;
   const styles = useMemo(() => {
@@ -271,6 +274,7 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
         patch,
         started,
         keyScope,
+        guidance,
         explore: settings.live.enabled && settings.live.mapping === "explore",
       },
       {
@@ -301,6 +305,7 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
     issue,
     prompt,
     keyScope,
+    guidance,
     queries,
     toast,
     onStarted,
@@ -442,6 +447,10 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
               onChange={setAssignToMe}
             />
           ) : null}
+        </View>
+        <View style={styles.group}>
+          <SectionLabel theme={theme}>Agent guidance</SectionLabel>
+          <GuidanceToggles theme={theme} guidance={guidance} onChange={changeGuidance} />
         </View>
         {launch.error ? (
           <Text accessibilityRole="alert" style={styles.error}>

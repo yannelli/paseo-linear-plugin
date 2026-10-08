@@ -1,3 +1,4 @@
+import type { RpcOutput } from "@getpaseo/plugin";
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -7,9 +8,11 @@ import {
   updateIssueRpc,
   type WorkflowState,
 } from "../shared/linear";
+import { agentHooksRpc } from "../shared/agent-hooks";
+import { agentToolsRpc, TOOLS_SERVER } from "../shared/agent-tools";
 import { launchAfterExploreRpc } from "../shared/live";
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
-import type { AgentAction, Isolation, LinearSettings } from "../shared/settings";
+import type { AgentAction, Guidance, Isolation, LinearSettings } from "../shared/settings";
 import { type AgentSelection, agentConfig } from "./agent-options";
 import { rememberLaunch } from "./agent-preferences";
 import type { PaseoProjectOption } from "./queries";
@@ -144,6 +147,25 @@ export interface LaunchRequest {
   keyScope: string | null;
   /** Maps the files with the read-only explore agent first, then starts the agent. */
   explore: boolean;
+  /** Guidance options; for Claude some also add hooks. */
+  guidance: Guidance;
+}
+
+type AgentTools = RpcOutput<typeof agentToolsRpc>;
+
+/** The config with the plugin's MCP server, whose token only reaches this issue tree. */
+export function withLinearTools<C extends object>(config: C, tools: Pick<AgentTools, "server" | "toolPolicy"> | null) {
+  if (!tools) return config;
+  return { ...config, mcpServers: { [TOOLS_SERVER]: tools.server }, toolPolicy: tools.toolPolicy };
+}
+
+/** The issue's guidance needs the MCP tools: Linear edits, or agents started on sub-issues. */
+export const needsLinearTools = (guidance: Guidance) => guidance.updateLinear || guidance.paseoSubagents;
+
+/** The config with the issue's Claude Code hooks, loaded as a plugin with --plugin-dir. */
+export function withHookPlugin<C extends object>(config: C, pluginDir: string | null) {
+  if (!pluginDir) return config;
+  return { ...config, providerOptions: { extraArgs: { "plugin-dir": pluginDir } } };
 }
 
 export type Paseo = ReturnType<typeof usePaseo>;
@@ -217,6 +239,8 @@ export function useLaunchAgent() {
   const updateIssue = useRpc(updateIssueRpc);
   const attachCard = useRpc(attachIssueCardRpc);
   const launchAfterExplore = useRpc(launchAfterExploreRpc);
+  const prepareHooks = useRpc(agentHooksRpc);
+  const prepareTools = useRpc(agentToolsRpc);
   return useMutation({
     mutationFn: async (request: LaunchRequest) => {
       const { issue, action } = request;
@@ -230,14 +254,38 @@ export function useLaunchAgent() {
         stateColor: state.color,
         action,
       };
+      // Hooks are a Claude Code feature; a failure to write them never blocks the launch.
+      const hooks =
+        request.agent.agent.id === "claude"
+          ? await prepareHooks({
+              issue: {
+                identifier: issue.identifier,
+                title: issue.title,
+                children: issue.children.map(({ identifier, title }) => ({ identifier, title })),
+              },
+              guidance: request.guidance,
+            }).catch(() => null)
+          : null;
+      const config = agentConfig(request.agent);
+      // Without the tools the agent still starts; its prompt then names tools it does not have.
+      const tools = needsLinearTools(request.guidance)
+        ? await prepareTools({
+            root: issue.identifier,
+            home: issue.identifier,
+            keyScope: request.keyScope,
+            workspaceId: workspace.id,
+            config,
+          }).catch(() => null)
+        : null;
       const agent = {
-        config: agentConfig(request.agent),
+        config: withLinearTools(withHookPlugin(config, hooks?.pluginDir ?? null), tools),
         title: agentTitle(action, issue),
         prompt: request.prompt,
         labels: {
           [AGENT_LABELS.issue]: issue.identifier,
           [AGENT_LABELS.action]: action,
           ...(request.keyScope ? { [AGENT_LABELS.project]: request.keyScope } : {}),
+          ...(tools ? { [AGENT_LABELS.tools]: tools.grantId } : {}),
         },
       };
       // The daemon starts the agent once the map is ready, so agentId is null until then.

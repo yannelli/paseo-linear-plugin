@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { IssueDetail } from "../shared/linear";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
-import { safeModeId, strictJsonSchema } from "../server/agent-runs";
+import { createJobStore, safeModeId, strictJsonSchema } from "../server/agent-runs";
 import type { LinearAccess } from "../server/handlers";
 import {
   explorePrompt,
@@ -88,6 +88,23 @@ describe("explore results", () => {
     await createMapStore(file).set(map);
     expect(await createMapStore(file).get("ENG-1")).toEqual(map);
     expect(await createMapStore(file).get("ENG-9")).toBeNull();
+    await createMapStore(file).delete("ENG-1");
+    expect(await createMapStore(file).get("ENG-1")).toBeNull();
+  });
+
+  it("forgets a finished job so the next start runs again, but keeps a running one", async () => {
+    const jobs = createJobStore<string>();
+    let finish = (_value: string) => {};
+    const result = new Promise<string>((resolve) => {
+      finish = resolve;
+    });
+    await jobs.start("ENG-1", async () => ({ agentId: "a1", result }));
+    jobs.forget("ENG-1");
+    expect(jobs.get("ENG-1")?.job.status).toBe("running");
+    finish("map");
+    await jobs.wait("ENG-1");
+    jobs.forget("ENG-1");
+    expect(jobs.get("ENG-1")).toBeNull();
   });
 });
 

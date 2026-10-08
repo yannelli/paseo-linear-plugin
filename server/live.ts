@@ -11,6 +11,7 @@ import {
   type Job,
   type LaunchInput,
   launchAfterExploreRpc,
+  clearMapRpc,
   linksRpc,
   listFilesRpc,
   subagentLogsRpc,
@@ -229,6 +230,15 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
     return { links: await fileLinks(agent.cwd, files) };
   });
 
+  server.handle(clearMapRpc, async ({ agentId }, { paseo }) => {
+    const agent = await agentInfo(paseo, agentId);
+    const identifier = agent.labels[AGENT_LABELS.issue];
+    if (!identifier) throw new Error("This agent is not linked to a Linear issue");
+    if (jobs.get(identifier)?.job.status === "running") throw new Error("The explore agent is still mapping this issue");
+    await maps.delete(identifier);
+    jobs.forget(identifier);
+    return { cleared: true };
+  });
   server.handle(subagentLogsRpc, async ({ agentId }, { paseo }) => {
     const agent = await agentInfo(paseo, agentId);
     // Only Claude keeps subagent transcripts this plugin can read.

@@ -1,5 +1,7 @@
 import path from "node:path";
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { registerAgentHooks } from "./server/agent-hooks";
+import { registerAgentTools } from "./server/agent-tools";
 import { createCredentialStore, defaultCredentialPath } from "./server/credentials";
 import { registerHandlers } from "./server/handlers";
 import { registerInit } from "./server/init";
@@ -24,9 +26,11 @@ export default function contribute(server: PluginServerContext) {
   registerLive(server, { access, maps, launches, readSettings });
   registerSync(server, { access, readSettings });
   registerInit(server, { readSettings });
+  registerAgentHooks(server, dataDirectory);
+  const closeTools = registerAgentTools(server, { access, dataDirectory });
   server.handle(accessRpc, async () => {
     const values = await readSettings();
     return values?.access ?? linearSettings.schema.parse({}).access;
   });
-  return () => {};
+  return closeTools;
 }

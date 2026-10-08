@@ -146,7 +146,7 @@ export async function agentConfigFor(paseo: Paseo, preferred: string) {
   return { provider, ...(modeId ? { modeId } : {}) };
 }
 
-async function lastReply(handle: AgentHandle) {
+export async function lastReply(handle: AgentHandle) {
   const page = await handle.timeline.refetch({
     direction: "tail",
     limit: 60,
@@ -247,6 +247,8 @@ export interface JobStore<T> {
   start(id: string | null, begin: () => Promise<StartedRun<T>>): Promise<Job>;
   /** Resolves with the job once it is done or failed; null for an unknown id. */
   wait(id: string): Promise<Job | null>;
+  /** Drops a finished job, so the next start makes a new run. A running job is kept. */
+  forget(id: string): void;
 }
 
 interface JobRecord<T> {
@@ -261,6 +263,9 @@ export function createJobStore<T>(): JobStore<T> {
     get: (id) => {
       const record = jobs.get(id);
       return record ? { job: record.job, value: record.value } : null;
+    },
+    forget(id) {
+      if (jobs.get(id)?.job.status !== "running") jobs.delete(id);
     },
     async wait(id) {
       const record = jobs.get(id);

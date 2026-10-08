@@ -12,6 +12,18 @@ const ActionOverrideSchema = z.object({
   text: z.string().default(""),
 });
 
+/** Extra instructions the launch adds to the prompt. Saved per project. */
+export const GuidanceSchema = z.object({
+  /** Keep Linear current: todos with sub-issue keys, and comments when a Linear tool exists. */
+  updateLinear: z.boolean().default(false),
+  /** Subagents state the issue key they work on. Claude agents also get a hook that tells them. */
+  subagentKeys: z.boolean().default(false),
+  /** Hand work to Paseo agents on the same provider, with thinking that fits the task. */
+  paseoSubagents: z.boolean().default(false),
+});
+export type Guidance = z.infer<typeof GuidanceSchema>;
+export const GUIDANCE_KEYS = ["updateLinear", "subagentKeys", "paseoSubagents"] as const;
+
 export const ProjectConfigSchema = z.object({
   projectId: z.string(),
   displayName: z.string(),
@@ -21,8 +33,19 @@ export const ProjectConfigSchema = z.object({
   steps: z.array(z.string()).default([]),
   implement: ActionOverrideSchema.prefault({}),
   review: ActionOverrideSchema.prefault({}),
+  guidance: GuidanceSchema.prefault({}),
 });
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
+
+/** Settings with a project's guidance saved, adding the project when it has no entry yet. */
+export function withProjectGuidance(
+  values: LinearSettings,
+  project: { projectId: string; displayName: string; rootPath: string },
+  guidance: Guidance,
+): LinearSettings {
+  const known = values.projects.find((entry) => entry.projectId === project.projectId);
+  return { ...values, projects: upsertProject(values, { ...(known ?? emptyProjectConfig(project)), guidance }) };
+}
 
 export const ISOLATIONS = ["worktree", "workspace"] as const;
 export type Isolation = (typeof ISOLATIONS)[number];
@@ -31,6 +54,9 @@ export const MAPPING_MODES = ["semantic", "explore"] as const;
 export type MappingMode = (typeof MAPPING_MODES)[number];
 
 export const LIVE_VIEWS = ["map", "graph"] as const;
+/** Auto follows the running agents; fit shows the whole graph. */
+export const GRAPH_CAMERAS = ["auto", "fit"] as const;
+export type GraphCamera = (typeof GRAPH_CAMERAS)[number];
 export type LiveView = (typeof LIVE_VIEWS)[number];
 
 export const linearSettings = defineSettings({
@@ -62,6 +88,9 @@ export const linearSettings = defineSettings({
         syncTodos: z.boolean().default(false),
         view: z.enum(LIVE_VIEWS).default("map"),
         issuesCollapsed: z.boolean().default(false),
+        graphCamera: z.enum(GRAPH_CAMERAS).default("auto"),
+        /** The wheel and drags scroll the page instead of moving the graph. */
+        graphLocked: z.boolean().default(false),
       })
       .prefault({}),
     // Where the plugin works: every project, minus or plus per-project switches.
