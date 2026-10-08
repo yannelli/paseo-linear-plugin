@@ -7,6 +7,7 @@ import {
   updateIssueRpc,
   type WorkflowState,
 } from "../shared/linear";
+import { launchAfterExploreRpc } from "../shared/live";
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
 import type { AgentAction, Isolation, LinearSettings } from "../shared/settings";
 import { type AgentSelection, agentConfig } from "./agent-options";
@@ -141,6 +142,8 @@ export interface LaunchRequest {
   started: WorkflowState | null;
   /** The Paseo project whose Linear key loaded the issue. */
   keyScope: string | null;
+  /** Maps the files with the read-only explore agent first, then starts the agent. */
+  explore: boolean;
 }
 
 export type Paseo = ReturnType<typeof usePaseo>;
@@ -213,16 +216,45 @@ export function useLaunchAgent() {
   const paseo = usePaseo();
   const updateIssue = useRpc(updateIssueRpc);
   const attachCard = useRpc(attachIssueCardRpc);
+  const launchAfterExplore = useRpc(launchAfterExploreRpc);
   return useMutation({
     mutationFn: async (request: LaunchRequest) => {
       const { issue, action } = request;
       const workspace = await openWorkspace(paseo, request);
-      const agent = await workspace.agents.create({
+      const state = request.patch.stateId && request.started ? request.started : issue.state;
+      const card = {
+        identifier: issue.identifier,
+        title: issue.title,
+        url: issue.url,
+        stateName: state.name,
+        stateColor: state.color,
+        action,
+      };
+      const agent = {
         config: agentConfig(request.agent),
         title: agentTitle(action, issue),
         prompt: request.prompt,
-        labels: { [AGENT_LABELS.issue]: issue.identifier, [AGENT_LABELS.action]: action },
-      });
+        labels: {
+          [AGENT_LABELS.issue]: issue.identifier,
+          [AGENT_LABELS.action]: action,
+          ...(request.keyScope ? { [AGENT_LABELS.project]: request.keyScope } : {}),
+        },
+      };
+      // The daemon starts the agent once the map is ready, so agentId is null until then.
+      let agentId: string | null;
+      if (request.explore && action === "implement") {
+        const launched = await launchAfterExplore({
+          workspaceId: workspace.id,
+          identifier: issue.identifier,
+          keyScope: request.keyScope,
+          agent,
+          card,
+        });
+        agentId = launched.agentId;
+      } else {
+        agentId = (await workspace.agents.create(agent)).id;
+        void attachCard({ agentId, card }).catch(() => undefined);
+      }
       lastProjectByTeam.set(issue.team.id, request.project.projectId);
       rememberLaunch({
         agent: request.agent.agent.id,
@@ -238,17 +270,7 @@ export function useLaunchAgent() {
           warning = errorMessage(error);
         }
       }
-      const state = request.patch.stateId && request.started ? request.started : issue.state;
-      const card = {
-        identifier: issue.identifier,
-        title: issue.title,
-        url: issue.url,
-        stateName: state.name,
-        stateColor: state.color,
-        action,
-      };
-      void attachCard({ agentId: agent.id, card }).catch(() => undefined);
-      return { agentId: agent.id, warning };
+      return { agentId, workspaceId: workspace.id, warning };
     },
   });
 }

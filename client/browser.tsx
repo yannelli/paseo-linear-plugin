@@ -11,6 +11,7 @@ import { ConnectCard } from "./connect";
 import { CreateIssueModal } from "./create-issue";
 import { IssueDetailView } from "./issue-detail";
 import { IssueList } from "./issue-list";
+import { ProjectGate } from "./access";
 import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
 import { LaunchPage, type LaunchTarget } from "./launch";
 import { useAuthStatus, useCatalog, useProjects } from "./queries";
@@ -262,14 +263,16 @@ export function LinearPanel({ theme, layout, navigation, workspaceId }: PluginWo
     if (teamId) update({ teamId, assignee: "anyone" });
   }, [settings, projectId, update]);
   return (
-    <IssueBrowser
-      theme={theme}
-      compact={layout.compact}
-      navigation={navigation}
-      scope={scope}
-      target={target}
-      keyProjectId={projectId ?? null}
-      canSwitchKey={false}
-    />
+    <ProjectGate theme={theme} projectId={projectId}>
+      <IssueBrowser
+        theme={theme}
+        compact={layout.compact}
+        navigation={navigation}
+        scope={scope}
+        target={target}
+        keyProjectId={projectId ?? null}
+        canSwitchKey={false}
+      />
+    </ProjectGate>
   );
 }

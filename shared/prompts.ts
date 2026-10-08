@@ -1,5 +1,6 @@
 import type { IssueDetail } from "./linear";
 import type { AgentAction, LinearSettings, ProjectConfig } from "./settings";
+import { todoConventionLine } from "./todo-sync";
 
 export const DEFAULT_TEMPLATES: Record<AgentAction, string> = {
   implement: [
@@ -128,6 +129,8 @@ export function composePrompt(input: ComposePromptInput): string {
   ];
   // A template that drops {{issue}} still gets the snapshot so the agent never works blind.
   if (!/\{\{\s*issue\s*\}\}/.test(template)) sections.push(snapshot);
+  const convention = input.action === "implement" ? todoConventionLine(issue.children) : null;
+  if (convention) sections.push(convention);
   const instructions = project?.instructions.trim();
   if (instructions) sections.push(`Project instructions:\n${instructions}`);
   const steps = project?.steps.map((step) => step.trim()).filter(Boolean) ?? [];
@@ -147,4 +150,16 @@ export function agentTitle(action: AgentAction, issue: { identifier: string; tit
   return `${prefix}: ${title}`.slice(0, 120);
 }
 
-export const AGENT_LABELS = { issue: "linear.issue", action: "linear.action" } as const;
+export const AGENT_LABELS = {
+  issue: "linear.issue",
+  action: "linear.action",
+  /** The Paseo project whose Linear key loaded the issue. */
+  project: "linear.project",
+  explore: "linear.explore",
+  init: "linear.init",
+} as const;
+
+/** Agents the plugin starts for itself: explore and project setup. */
+export function isInternalAgent(labels: Readonly<Record<string, string>> | undefined): boolean {
+  return Boolean(labels?.[AGENT_LABELS.explore] || labels?.[AGENT_LABELS.init]);
+}
