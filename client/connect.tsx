@@ -1,10 +1,11 @@
 import { useRpc } from "@getpaseo/plugin/client";
-import { Icon, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { ExternalLink } from "@getpaseo/plugin/client/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { authSaveRpc } from "../shared/linear";
+import { PluginIcon } from "./plugin-icon";
 import { Button, errorMessage, type Theme } from "./ui";
 
 export const LINEAR_KEY_SETTINGS_URL = "https://linear.app/settings/account/security";
@@ -121,7 +122,7 @@ export function ConnectCard({ theme, compact }: { theme: Theme; compact: boolean
     <View style={styles.root}>
       <View style={styles.card}>
         <View style={styles.header}>
-          <Icon name="SquareKanban" size={22} color={colors.foreground} />
+          <PluginIcon size={22} color={colors.foreground} theme={theme} />
           <Text style={styles.title}>Connect Linear</Text>
         </View>
         <Text style={styles.body}>

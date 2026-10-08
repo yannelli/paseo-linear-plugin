@@ -1,6 +1,7 @@
 import { type PluginAgentPanelProps, useSettings, useWorkspace } from "@getpaseo/plugin/client";
 import { type ComponentType, type ReactNode, useEffect } from "react";
 import { linearSettings, type ProjectAccess, projectEnabled } from "../shared/settings";
+import { PluginIcon } from "./plugin-icon";
 import { EmptyState, type Theme } from "./ui";
 
 // Composer pills live outside React, so components that read settings share the project
@@ -44,7 +45,7 @@ export function ProjectGate(props: {
   return (
     <EmptyState
       theme={props.theme}
-      icon="SquareKanban"
+      icon={PluginIcon}
       title="Linear is off for this project"
       detail="Turn it on in Linear settings, under Projects."
     />

@@ -4,7 +4,9 @@ import { openPluginScreen, registerScreen } from "./client/compat";
 import { gateAgentPanel } from "./client/access";
 import { LivePanel } from "./client/live-panel";
 import { contributeComposerPills } from "./client/pill";
+import { PluginIcon } from "./client/plugin-icon";
 import { ConnectionSettings } from "./client/settings-connection";
+import { IconSettingsScreen } from "./client/settings-icon";
 import { LiveSettings } from "./client/settings-live";
 import { ProjectSettings } from "./client/settings-projects";
 import { PromptSettings } from "./client/settings-prompts";
@@ -23,6 +25,7 @@ export default function contribute(client: PluginClientContext) {
     id: SCREEN_ID,
     title: "Linear",
     icon: "SquareKanban",
+    RowIcon: PluginIcon,
     Component: LinearScreen,
   });
   client.addWorkspacePanel({
@@ -57,6 +60,12 @@ export default function contribute(client: PluginClientContext) {
     title: "Live",
     icon: "Radar",
     Component: LiveSettings,
+  });
+  client.addSettingsScreen({
+    id: "icon",
+    title: "Icon",
+    icon: "Shapes",
+    Component: IconSettingsScreen,
   });
   client.addSettingsScreen({
     id: "projects",

@@ -1,5 +1,6 @@
 import { defineRpc, defineSettings } from "@getpaseo/plugin";
 import { z } from "zod";
+import { IconSettingsSchema } from "./custom-icon";
 
 export const AGENT_ACTIONS = ["implement", "review"] as const;
 export type AgentAction = (typeof AGENT_ACTIONS)[number];
@@ -101,6 +102,8 @@ export const linearSettings = defineSettings({
       })
       .prefault({}),
     projects: z.array(ProjectConfigSchema).default([]),
+    /** The icon of pills and other plugin places: built-in or the user's SVG. */
+    icon: IconSettingsSchema.prefault({}),
   }),
 });
 

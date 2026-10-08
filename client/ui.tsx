@@ -1,6 +1,6 @@
 import type { PluginSurfaceProps } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { type ReactNode, useCallback, useMemo } from "react";
+import { type ComponentType, type ReactNode, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -14,6 +14,15 @@ import {
 export { Avatar, LabelPill, PriorityIcon, priorityMeta, StateIcon } from "./glyphs";
 
 export type Theme = PluginSurfaceProps["theme"];
+
+/** A Lucide icon name, or a component such as the plugin icon. */
+export type Glyph = string | ComponentType<{ size: number; color: string; theme: Theme }>;
+
+export function GlyphIcon(props: { glyph: Glyph; size: number; color: string; theme: Theme }) {
+  const { glyph: Custom, size, color, theme } = props;
+  if (typeof Custom === "string") return <Icon name={Custom} size={size} color={color} />;
+  return <Custom size={size} color={color} theme={theme} />;
+}
 
 type InteractionState = PressableStateCallbackType & { hovered?: boolean };
 
@@ -43,7 +52,7 @@ function buttonFill(variant: ButtonVariant, colors: Theme["colors"]): string {
 export interface ButtonProps {
   theme: Theme;
   label: string;
-  icon?: string;
+  icon?: Glyph;
   variant?: ButtonVariant;
   size?: keyof typeof HEIGHT;
   disabled?: boolean;
@@ -52,10 +61,10 @@ export interface ButtonProps {
   onPress(): void;
 }
 
-function ButtonGlyph(props: { busy: boolean; icon?: string; size: number; color: string }) {
+function ButtonGlyph(props: { busy: boolean; icon?: Glyph; size: number; color: string; theme: Theme }) {
   if (props.busy) return <ActivityIndicator size="small" color={props.color} />;
   if (!props.icon) return null;
-  return <Icon name={props.icon} size={props.size} color={props.color} />;
+  return <GlyphIcon glyph={props.icon} size={props.size} color={props.color} theme={props.theme} />;
 }
 
 export function Button({
@@ -103,7 +112,7 @@ export function Button({
       onPress={onPress}
       style={pressStyle}
     >
-      <ButtonGlyph busy={busy === true} icon={icon} size={size === "xs" ? 14 : 16} color={ink} />
+      <ButtonGlyph busy={busy === true} icon={icon} size={size === "xs" ? 14 : 16} color={ink} theme={theme} />
       <Text numberOfLines={1} style={styles.label}>
         {label}
       </Text>
@@ -276,7 +285,7 @@ export function OptionRow(props: {
 
 export function EmptyState(props: {
   theme: Theme;
-  icon: string;
+  icon: Glyph;
   title: string;
   detail?: string;
   tone?: "default" | "danger";
@@ -309,7 +318,7 @@ export function EmptyState(props: {
   );
   return (
     <View style={styles.root}>
-      <Icon name={props.icon} size={28} color={colors.foregroundMuted} />
+      <GlyphIcon glyph={props.icon} size={28} color={colors.foregroundMuted} theme={props.theme} />
       <Text style={styles.title}>{props.title}</Text>
       {props.detail ? <Text style={styles.detail}>{props.detail}</Text> : null}
       {props.children}

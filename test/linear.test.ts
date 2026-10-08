@@ -271,10 +271,11 @@ describe("agent prompts", () => {
         view: "map",
         issuesCollapsed: false,
         graphCamera: "auto",
-      graphLocked: false,
+        graphLocked: false,
       },
       access: { allProjects: true, projects: {} },
       projects: [],
+      icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false },
     });
   });
 });

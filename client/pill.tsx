@@ -17,6 +17,7 @@ import { progressByKey } from "../shared/todo-sync";
 import { currentAccess, onAccessChange, publishAccess } from "./access";
 import { KeyScopeProvider } from "./key-scope";
 import { MONO } from "./live-issues";
+import { PluginIcon } from "./plugin-icon";
 import { useIssue } from "./queries";
 import { focusIssue, panelScope } from "./store";
 import { Button, errorMessage, StateIcon, type Theme } from "./ui";
@@ -144,7 +145,7 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
         <Button
           theme={theme}
           size="xs"
-          icon="SquareKanban"
+          icon={PluginIcon}
           label="Open issue"
           onPress={() => {
             focusIssue(panelScope(workspaceId), identifier);
@@ -337,13 +338,13 @@ export function contributeComposerPills(client: PluginClientContext) {
       button: identifier
         ? {
             title: `Linear issue ${identifier}`,
-            icon: "SquareKanban",
+            icon: PluginIcon,
             label: identifier,
             behavior: { kind: "popover", Content: Linked },
           }
         : {
             title: "Send a Linear issue to this agent",
-            icon: "SquareKanban",
+            icon: PluginIcon,
             label: "Linear",
             behavior: { kind: "popover", Content: Search },
           },
