@@ -271,15 +271,20 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
         patch,
         started,
         keyScope,
+        explore: settings.live.enabled && settings.live.mapping === "explore",
       },
       {
-        onSuccess: ({ agentId, warning }) => {
+        onSuccess: ({ agentId, workspaceId, warning }) => {
           void queries.invalidateQueries({ queryKey: ["linear"] });
+          const started = agentId
+            ? "Agent started."
+            : "Mapping files first. The agent starts when the map is ready.";
           if (warning) {
-            toast.show(`Agent started. Linear was not updated: ${warning}`, { variant: "warning" });
-          } else toast.show("Agent started", { variant: "success" });
+            toast.show(`${started} Linear was not updated: ${warning}`, { variant: "warning" });
+          } else toast.show(started, { variant: "success" });
           onStarted();
-          navigation?.openAgent({ agentId });
+          if (agentId) navigation?.openAgent({ agentId });
+          else navigation?.openWorkspace({ workspaceId });
         },
       },
     );

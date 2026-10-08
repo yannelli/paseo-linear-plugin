@@ -232,6 +232,18 @@ describe("agent prompts", () => {
     expect(prompt).not.toContain("You are working on");
   });
 
+  it("asks implementers for one keyed todo per sub-issue only when sub-issues exist", () => {
+    const children = [{ id: "c1", identifier: "ENG-124", title: "Queue", state }];
+    const base = { settings, project: null, includeComments: false, extraInstructions: "" };
+    const implement = composePrompt({ ...base, action: "implement", issue: { ...detail, children } });
+    expect(implement).toContain('Start each todo with its sub-issue key, for example "ENG-124: <task>".');
+    const review = composePrompt({ ...base, action: "review", issue: { ...detail, children } });
+    expect(review).not.toContain("Start each todo");
+    expect(composePrompt({ ...base, action: "implement", issue: detail })).not.toContain(
+      "Start each todo",
+    );
+  });
+
   it("parses empty settings into complete defaults", () => {
     expect(settings).toEqual({
       templates: { implement: "", review: "" },
@@ -242,6 +254,15 @@ describe("agent prompts", () => {
         moveToStarted: true,
         assignToMe: true,
       },
+      live: {
+        enabled: true,
+        mapping: "semantic",
+        exploreProvider: "",
+        syncTodos: false,
+        view: "map",
+        issuesCollapsed: false,
+      },
+      access: { allProjects: true, projects: {} },
       projects: [],
     });
   });

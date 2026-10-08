@@ -21,6 +21,8 @@ import {
   upsertProject,
 } from "../shared/settings";
 import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
+import { ProjectSetup } from "./project-init";
+import { AccessSection } from "./settings-access";
 import { type PaseoProjectOption, useAuthStatus, useCatalog, useProjects } from "./queries";
 import {
   MultilineField,
@@ -120,6 +122,12 @@ function ProjectEditor({ theme, settings }: { theme: Theme; settings: ReadySetti
   }
   return (
     <View>
+      <AccessSection
+        access={values.access}
+        saved={settings.values.access}
+        projects={projects.data}
+        edit={edit}
+      />
       <SettingsSection title="Project">
         <SettingsCard>
           <SettingsSelect
@@ -132,6 +140,7 @@ function ProjectEditor({ theme, settings }: { theme: Theme; settings: ReadySetti
         </SettingsCard>
       </SettingsSection>
       <TeamsSection config={config} change={change} />
+      <ProjectSetup theme={theme} config={config} change={change} />
       <InstructionsSection theme={theme} config={config} change={change} />
       {AGENT_ACTIONS.map((action) => (
         <ActionSection key={action} theme={theme} action={action} config={config} change={change} />
