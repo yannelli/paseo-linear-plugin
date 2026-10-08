@@ -179,6 +179,15 @@ For implement agents on an issue with sub-issues, the prompt asks the agent to s
 
 Each agent's composer has a **Linear** pill. On an agent started from an issue, the pill shows the issue key. It opens the issue status, each sub-issue with its todo progress, and buttons for Linear Live, the issue, and **Sync now**. On other agents, the pill searches Linear and sends the issue text to the agent as a message.
 
+### Plugin icon
+
+In **Settings → Plugins → Linear → Icon**, choose an SVG file or paste SVG markup. Composer pills, the Linear sidebar row on Paseo 0.11 and newer, the issue card in the timeline, and the Linear screens then use it. Paseo menus, panel tabs, and settings take only built-in icon names, so they keep the Linear board icon. The plugin accepts SVG only. It refuses scripts, event handlers, HTML content, entities, and links to other files or bitmap images. The SVG needs a viewBox, or a width and height in pixels.
+
+- **Color:** **Original colors** keeps the SVG as drawn, and `currentColor` takes the color Paseo gives the icon. **Theme color**, **Theme accent**, **Linear indigo**, and **Custom color** paint the whole icon one color and keep its transparency. These choices also apply to the built-in icon.
+- **Solid:** fills shapes that only have an outline, with their stroke color, so a line icon shows as a solid shape.
+
+The preview shows each change before you save. The iOS and Android apps cannot draw SVG images from plugins, so they show the built-in icon in the chosen color.
+
 ### Update Linear from agent todos
 
 Turn on **Update Linear from agent todos** in the Live settings. After each turn of an implement agent, the daemon reads the agent's todos:
@@ -203,6 +212,7 @@ In **Settings → Plugins → Linear → Projects**, select **Start** under **Se
 - **Linear tools for agents:** the daemon runs the `linear` MCP server on `127.0.0.1` only, and only after an agent gets it. Each agent gets its own random token, and its tools reach only its issue and that issue's sub-issues. Edits use the Linear key of the project that loaded the issue. Requests from a web page are refused. `agent-tools.json` beside the key file keeps the port and a hash of each token, so agents keep their tools after a restart. The token itself is in the agent's Paseo config.
 - **Claude hooks:** when an **Agent guidance** switch is on for a Claude agent, the daemon writes a Claude Code plugin to `claude-hooks/` beside the key file, one folder for each issue and set of hooks. It holds the issue key and title and the sub-issue keys and titles. The agent starts with `--plugin-dir` set to that folder. The hooks print that text and run no other command. The daemon does not write hooks on Windows hosts.
 - **Todo sync:** when it is on, the daemon changes issue statuses in Linear with the key of the project that loaded the issue.
+- **Plugin icon:** the SVG is saved in the plugin settings on the daemon host. The app draws it as an image, which does not run scripts or load other files.
 - **Cached results:** the daemon keeps up to 300 recent Linear responses in memory for up to 24 hours. It groups them by a hash of the key, so two keys never share results. The app shows saved results at once with **Showing saved results. Updating…** while it gets new data. An edit clears the cached lists and issues for that key. Saving or removing a key clears the whole cache. The cache is not written to disk, and a daemon restart clears it.
 
 Linear errors, such as a rejected key or a rate limit, show in the panel or as a message.
@@ -211,7 +221,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 
 | File | Runtime | Role |
 | --- | --- | --- |
-| `index.client.tsx` | App | Registers the Linear screen, the workspace panel, the Linear Live panel, the Account, Prompts, Live, and Projects settings, the command center items, the `/linear` command, the timeline card, the composer attachment, and the Linear pill |
+| `index.client.tsx` | App | Registers the Linear screen, the workspace panel, the Linear Live panel, the Account, Prompts, Live, Icon, and Projects settings, the command center items, the `/linear` command, the timeline card, the composer attachment, and the Linear pill |
 | `index.server.ts` | Daemon | Registers the settings, the RPC handlers, and the todo sync hook |
 | `client/browser.tsx` | App | Screen and panel: picks the key, then shows the list, the issue, or the agent setup page |
 | `client/issue-list.tsx`, `client/issue-row.tsx`, `client/issue-tree.ts` | App | Search, filters, sort, rows, status groups, and sub-issue nesting |
@@ -220,6 +230,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 | `client/markdown.tsx` | App | Renders Markdown |
 | `client/launch.tsx`, `client/launch-fields.tsx`, `client/launch-guidance.tsx`, `client/launch-choices.ts`, `client/launch-plan.ts`, `client/agent-options.ts` | App | Agent setup page, Run in options, agent guidance, and agent start |
 | `client/model-browser.tsx`, `client/provider-icon.tsx` | App | Model picker and provider icons |
+| `client/plugin-icon.tsx`, `client/settings-icon.tsx`, `shared/custom-icon.ts` | App, Both | The plugin icon, its settings screen, and the SVG checks, colors, and fill |
 | `client/create-issue.tsx`, `client/pickers.tsx` | App | New issue form and option pickers |
 | `client/connect.tsx`, `client/settings-*.tsx` | App | Key form and settings screens |
 | `client/queries.ts`, `client/store.ts`, `client/key-scope.tsx` | App | Data hooks with saved results, browser state, and the key in use |
@@ -227,7 +238,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 | `client/timeline-card.tsx`, `client/ui.tsx`, `client/glyphs.tsx` | App | Timeline card, shared controls, and icons |
 | `client/live-panel.tsx`, `client/live-header.tsx`, `client/live-issues.tsx`, `client/live-feed.tsx`, `client/live-timeline.ts` | App | Linear Live panel, header, sub-issues, activity, and the agent timeline feed |
 | `client/live-map.tsx`, `client/live-graph.tsx`, `client/graph-labels.ts`, `client/graph-camera.tsx`, `client/live-cursor.tsx`, `client/live-agents.tsx` | App | File map, file graph with its labels and camera, agent cursors, and the agents list |
-| `client/tool-buttons.tsx`, `client/web.ts` | App | Icon buttons for the map and graph, and the wheel listener on the web |
+| `client/tool-buttons.tsx`, `client/web.ts` | App | Icon buttons for the map and graph, and the wheel listener and file picker on the web |
 | `client/pill.tsx` | App | Linear pill in each agent's composer |
 | `client/project-init.tsx` | App | Project setup proposal in the Projects settings |
 | `shared/linear.ts` | Both | RPC contracts and issue schemas |
@@ -263,7 +274,7 @@ npm run check
 paseo plugin add "$PWD"
 ```
 
-After you edit the source, run `paseo plugin reload paseo-linear-plugin`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser and task list toggle, the description autosave, the agent options, the prompt guidance and its hooks, the MCP server and its tools, the links between files in many languages, the graph layout and camera, and the release scripts. They use a local GraphQL server and do not call Linear.
+After you edit the source, run `paseo plugin reload paseo-linear-plugin`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser and task list toggle, the description autosave, the agent options, the prompt guidance and its hooks, the MCP server and its tools, the links between files in many languages, the graph layout and camera, the SVG icon checks and colors, and the release scripts. They use a local GraphQL server and do not call Linear.
 
 ## Graphics
 

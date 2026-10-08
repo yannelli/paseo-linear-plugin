@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 
 // The only module that uses the DOM. React wheel listeners are passive, so they cannot keep
 // the page from scrolling while the wheel zooms the graph. Off the web each export does nothing.
+// The file picker is a hidden file input, because plugins cannot use native document pickers.
 
 interface WheelEventLike {
   deltaY: number;
@@ -42,4 +43,49 @@ export function listenWheel(
   };
   node.addEventListener("wheel", listener, { passive: false });
   return () => node.removeEventListener("wheel", listener);
+}
+
+interface FileLike {
+  name: string;
+  size: number;
+  text(): Promise<string>;
+}
+
+interface FileInputLike {
+  type: string;
+  accept: string;
+  files: ArrayLike<FileLike> | null;
+  onchange: (() => void) | null;
+  click(): void;
+}
+
+interface DocumentLike {
+  createElement(tag: "input"): FileInputLike;
+}
+
+/** True where pickTextFile can open a file picker. */
+export const canPickFiles = Platform.OS === "web";
+
+export type PickedFile = { name: string; text: string } | { error: string };
+
+/** Opens the browser file picker and calls onPick with the chosen file. Nothing on cancel. */
+export function pickTextFile(accept: string, maxBytes: number, onPick: (file: PickedFile) => void): void {
+  const document = (globalThis as { document?: DocumentLike }).document;
+  if (!canPickFiles || !document) return;
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = accept;
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (!file) return;
+    if (file.size > maxBytes) {
+      onPick({ error: `${file.name} is too large. Use a file under ${Math.round(maxBytes / 1000)} KB.` });
+      return;
+    }
+    file.text().then(
+      (text) => onPick({ name: file.name, text }),
+      () => onPick({ error: `Paseo could not read ${file.name}.` }),
+    );
+  };
+  input.click();
 }

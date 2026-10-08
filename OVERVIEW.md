@@ -31,6 +31,10 @@ Open **Linear Live** from the Linear pill in an agent's composer. It shows the i
 
 On agents not started from an issue, the Linear pill searches Linear and sends an issue to the agent.
 
+## Plugin icon
+
+In **Settings → Plugins → Linear → Icon**, choose an SVG file or paste SVG markup. Composer pills, the Linear sidebar row, the timeline card, and the Linear screens use it. Paseo menus and panel tabs keep the built-in icon. Keep the original colors, or paint the icon with the theme color, the theme accent, Linear indigo, or a custom color. **Solid** fills outline shapes. The plugin refuses SVGs with scripts, event handlers, or links to other files. The iOS and Android apps show the built-in icon in the chosen color.
+
 ## Update Linear from todos
 
 Turn on **Update Linear from agent todos** in the Live settings. After each turn, a todo that starts with a sub-issue key, such as `ENG-124: add the queue`, moves that sub-issue to In Progress, and then to Done when all its todos are done. The parent moves to In Review when every sub-issue is done, never to Done. Statuses only move forward.

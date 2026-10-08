@@ -1,6 +1,6 @@
 import type { PluginClientContext, PluginSurfaceProps } from "@getpaseo/plugin/client";
 import * as hostUi from "@getpaseo/plugin/client/ui";
-import { type ComponentType, createElement } from "react";
+import { type ComponentType, createContext, createElement, useContext } from "react";
 
 // Paseo 0.11 replaced surfaces with screens and sidebar header items. 0.10 only has
 // addSurface/addSidebarItem; later releases drop those aliases. Detect once, register once.
@@ -13,6 +13,7 @@ interface ScreenRef {
 interface SidebarItemProps {
   currentScreen: ScreenRef | null;
   openScreen(input: ScreenRef): void;
+  theme?: PluginSurfaceProps["theme"];
 }
 
 interface ScreenClient {
@@ -33,8 +34,13 @@ interface SurfaceClient {
   addSidebarItem(input: { id: string; title: string; icon: string; surface: string }): Cleanup;
 }
 
+interface RowIconProps {
+  size: number;
+  color: string;
+}
+
 type SidebarRowComponent = ComponentType<{
-  icon?: string;
+  icon?: string | ComponentType<RowIconProps>;
   label?: string;
   active?: boolean;
   onPress(): void;
@@ -48,8 +54,13 @@ export interface ScreenRegistration {
   id: string;
   title: string;
   icon: string;
+  /** Drawn in the sidebar row where the host accepts icon components; else `icon`. */
+  RowIcon?: ComponentType<RowIconProps & { theme: PluginSurfaceProps["theme"] | null }>;
   Component: ComponentType<PluginSurfaceProps>;
 }
+
+// The row draws its icon with a size and a color only, so the item passes its theme down.
+const RowTheme = createContext<PluginSurfaceProps["theme"] | null>(null);
 
 export function registerScreen(client: PluginClientContext, screen: ScreenRegistration): Cleanup {
   const SidebarRow = (hostUi as Record<string, unknown>).SidebarRow as
@@ -61,12 +72,19 @@ export function registerScreen(client: PluginClientContext, screen: ScreenRegist
       title: screen.title,
       Component: screen.Component,
     });
-    function SidebarItem({ currentScreen, openScreen }: SidebarItemProps) {
-      return createElement(SidebarRow as SidebarRowComponent, {
-        icon: screen.icon,
+    const { RowIcon } = screen;
+    const ThemedIcon = RowIcon
+      ? function ThemedIcon(props: RowIconProps) {
+          return createElement(RowIcon, { ...props, theme: useContext(RowTheme) });
+        }
+      : null;
+    function SidebarItem({ currentScreen, openScreen, theme }: SidebarItemProps) {
+      const row = createElement(SidebarRow as SidebarRowComponent, {
+        icon: ThemedIcon ?? screen.icon,
         active: currentScreen?.screenId === screen.id,
         onPress: () => openScreen({ screenId: screen.id }),
       });
+      return createElement(RowTheme.Provider, { value: theme ?? null }, row);
     }
     const removeItem = client.addSidebarHeaderItem({
       id: screen.id,
