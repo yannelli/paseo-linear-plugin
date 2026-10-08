@@ -133,7 +133,11 @@ You do not need to change version numbers. When a release-triggering commit land
 3. Updates `package.json` and `package-lock.json`, then tags the commit.
 4. Publishes the GitHub release and the npm package.
 
-To preview the next release, run `npm run release:dry-run` on a clean `main` checkout with all tags fetched. See [npm publishing](docs/npm-publishing.md) for the publishing setup.
+### Beta releases
+
+To publish a change for testing before a stable release, open the pull request against the `beta` branch. A release-triggering commit on `beta` publishes the next version as a beta, such as `1.1.0-beta.0`. The beta goes to npm with the `beta` dist-tag and to GitHub as a prerelease, so `latest` does not change. Install it with `paseo plugin add npm:@yannelli/paseo-linear-plugin@beta`. When the beta is ready, merge `beta` into `main` to release the stable version.
+
+To preview the next release, run `npm run release:dry-run` on a clean `main` or `beta` checkout with all tags fetched. See [npm publishing](docs/npm-publishing.md) for the publishing setup.
 
 ## License
 

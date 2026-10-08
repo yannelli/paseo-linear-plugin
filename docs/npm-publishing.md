@@ -12,7 +12,7 @@ Paseo runs `npm install --omit=dev --ignore-scripts` on the daemon host and comp
 
 ## Workflow step
 
-The **Publish npm package** step reads the name and version from `package.json`. It runs `npm publish` when npm does not have that version yet. If a publish fails, a rerun completes it. A push without release-triggering commits skips the step, because npm already has the version.
+The **Publish npm package** step reads the name and version from `package.json`. It runs `npm publish` when npm does not have that version yet. If a publish fails, a rerun completes it. A push without release-triggering commits skips the step, because npm already has the version. A beta version, such as `1.1.0-beta.0`, is published from the `beta` branch with `npm publish --tag beta`, so the `latest` dist-tag does not change.
 
 The job grants `id-token: write`. npm uses the OIDC token to authenticate and attaches a provenance statement automatically. Provenance requires a public repository.
 
