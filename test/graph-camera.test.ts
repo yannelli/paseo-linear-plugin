@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampCamera, FIT, focusBox, frameBox, MAX_ZOOM, zoomAt } from "../shared/graph-camera";
+import { clampCamera, FIT, focusBox, frameBox, growth, MAX_ZOOM, zoomAt } from "../shared/graph-camera";
 import type { Graph } from "../shared/graph-model";
 
 const W = 800;
@@ -39,6 +39,23 @@ describe("graph camera", () => {
     expect(draw(corner, { x: W, y: 0 })).toEqual({ x: W, y: 0 });
     expect(frameBox({ left: -100, top: -100, right: 900, bottom: 700 }, W, H)).toEqual(FIT);
   });
+
+  it("centers on the focus as far as the box stays in view", () => {
+    const box = { left: 500, top: 300, right: 700, bottom: 450 };
+    const camera = frameBox({ ...box, center: { x: 520, y: 320 } }, W, H);
+    expect(camera.zoom).toBe(2.5);
+    // The focus moves toward the middle until the box's far corner reaches the view edge.
+    expect(draw(camera, { x: 540, y: 330 })).toEqual({ x: W / 2, y: H / 2 });
+    expect(draw(camera, { x: 700, y: 450 })).toEqual({ x: W, y: H });
+    expect(draw(camera, { x: 500, y: 300 }).x).toBeGreaterThanOrEqual(0);
+    const inside = frameBox({ ...box, center: { x: 600, y: 380 } }, W, H);
+    expect(draw(inside, { x: 600, y: 380 })).toEqual({ x: W / 2, y: H / 2 });
+  });
+
+  it("grows parts of the graph by the square root of the zoom", () => {
+    expect(growth(1)).toBe(1);
+    expect(growth(4)).toBe(2);
+  });
 });
 
 describe("focusBox", () => {
@@ -70,7 +87,13 @@ describe("focusBox", () => {
   ]);
 
   it("covers the agents' nodes and their neighbors, but not the issue", () => {
-    expect(focusBox(graph, positions, ["file:a.ts"])).toEqual({ left: 410, top: 194, right: 740, bottom: 406 });
+    expect(focusBox(graph, positions, ["file:a.ts"])).toEqual({
+      left: 410,
+      top: 194,
+      right: 740,
+      bottom: 406,
+      center: { x: 600, y: 250 },
+    });
   });
 
   it("shows the whole graph when the agents work on the issue itself", () => {

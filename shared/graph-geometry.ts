@@ -6,31 +6,36 @@ export interface Point {
   y: number;
 }
 
-export interface Route {
-  points: Point[];
+export interface Route<P extends Point = Point> {
+  points: P[];
   /** Each point's share of the whole distance, from 0 to 1. */
   stops: number[];
   length: number;
 }
 
-/** Where a route is at a share of its distance, from 0 to 1. */
-export function pointAt(path: Route, share: number): Point {
+/** Where a route is at a share of its distance, from 0 to 1. Mixes every number of the points. */
+export function pointAt<P extends Point>(path: Route<P>, share: number): P {
   const at = Math.min(1, Math.max(0, share));
   for (let index = 1; index < path.stops.length; index += 1) {
     const stop = path.stops[index] as number;
     if (at > stop) continue;
     const before = path.stops[index - 1] as number;
-    const from = path.points[index - 1] as Point;
-    const to = path.points[index] as Point;
+    const from = path.points[index - 1] as P;
+    const to = path.points[index] as P;
     const part = stop > before ? (at - before) / (stop - before) : 1;
-    return { x: from.x + (to.x - from.x) * part, y: from.y + (to.y - from.y) * part };
+    const mixed: Record<string, unknown> = { ...(to as object) };
+    for (const [key, value] of Object.entries(to as object)) {
+      const start = (from as Record<string, unknown>)[key];
+      if (typeof value === "number" && typeof start === "number") mixed[key] = start + (value - start) * part;
+    }
+    return mixed as P;
   }
-  return path.points[path.points.length - 1] as Point;
+  return path.points[path.points.length - 1] as P;
 }
 
 /** A route through the points without zero-length steps, or null when there is nowhere to go. */
-export function route(points: readonly Point[]): Route | null {
-  const kept: Point[] = [];
+export function route<P extends Point>(points: readonly P[]): Route<P> | null {
+  const kept: P[] = [];
   const steps = [0];
   for (const point of points) {
     const last = kept[kept.length - 1];
@@ -84,21 +89,27 @@ export interface PlacedLabel {
   short: boolean;
 }
 
-// Places labels in request order at the first spot that overlaps no node or placed label,
-// moved inside the box when it would cross an edge. A label with no free spot is hidden.
+export interface Rect {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+// Places labels in request order at the first spot that overlaps no node, other obstacle, or
+// placed label, moved inside the box when it would cross an edge. Others are hidden.
 export function placeLabels(
   requests: readonly LabelRequest[],
   width: number,
   height: number,
-  nodes: readonly { at: Point; radius: number }[] = [],
+  obstacles: readonly ({ at: Point; radius: number } | Rect)[] = [],
   gap = 3,
 ): Map<string, PlacedLabel> {
-  const placed = nodes.map(({ at, radius }) => ({
-    left: at.x - radius,
-    right: at.x + radius,
-    top: at.y - radius,
-    bottom: at.y + radius,
-  }));
+  const placed: Rect[] = obstacles.map((shape) =>
+    "at" in shape
+      ? { left: shape.at.x - shape.radius, right: shape.at.x + shape.radius, top: shape.at.y - shape.radius, bottom: shape.at.y + shape.radius }
+      : { ...shape },
+  );
   const shown = new Map<string, PlacedLabel>();
   for (const request of requests) {
     const tries = [{ ...request, short: false }];

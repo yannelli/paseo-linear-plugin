@@ -17,6 +17,11 @@ export interface Box {
   bottom: number;
 }
 
+/** A box with the point the view centers on when the box still fits around it. */
+export interface Focus extends Box {
+  center: Point;
+}
+
 export const FIT: Camera = { x: 0, y: 0, zoom: 1 };
 export const MIN_ZOOM = 1;
 export const MAX_ZOOM = 4;
@@ -26,6 +31,11 @@ const PAD_X = 90;
 const PAD_Y = 56;
 
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
+
+/** How much nodes, labels, and cursors grow on screen: less than the zoom, so they stay readable. */
+export function growth(zoom: number): number {
+  return Math.sqrt(zoom);
+}
 
 /** Where a canvas point draws in the view. */
 export function project(camera: Camera, at: Point, width: number, height: number): Point {
@@ -61,21 +71,31 @@ export function zoomAt(camera: Camera, at: Point, factor: number, width: number,
   return clampCamera({ zoom, x: at.x - cx - zoom * (px - cx), y: at.y - cy - zoom * (py - cy) }, width, height);
 }
 
-/** Shows the box as large as fits in the view, up to the auto zoom. */
-export function frameBox(box: Box, width: number, height: number): Camera {
+/** The center nearest `wanted` that keeps the span from low to high in a view of this size. */
+function centerFor(wanted: number, low: number, high: number, half: number): number {
+  return high - low >= half * 2 ? (low + high) / 2 : clamp(wanted, high - half, low + half);
+}
+
+/** Shows the box as large as fits in the view, up to the auto zoom, centered on its focus. */
+export function frameBox(box: Box | Focus, width: number, height: number): Camera {
   const fit = Math.min(width / Math.max(1, box.right - box.left), height / Math.max(1, box.bottom - box.top));
   const zoom = clamp(fit, MIN_ZOOM, AUTO_ZOOM);
-  const x = zoom * (width / 2 - (box.left + box.right) / 2);
-  const y = zoom * (height / 2 - (box.top + box.bottom) / 2);
-  return clampCamera({ zoom, x, y }, width, height);
+  const wanted = "center" in box ? box.center : { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+  const middleX = centerFor(wanted.x, box.left, box.right, width / 2 / zoom);
+  const middleY = centerFor(wanted.y, box.top, box.bottom, height / 2 / zoom);
+  return clampCamera({ zoom, x: zoom * (width / 2 - middleX), y: zoom * (height / 2 - middleY) }, width, height);
 }
 
 // The area auto mode shows: the nodes the running agents work on and their neighbors, with
 // room for labels and cursors. Null when no agent works on a node other than the issue.
-export function focusBox(graph: Graph, positions: ReadonlyMap<string, Point>, targets: Iterable<string>): Box | null {
+export function focusBox(graph: Graph, positions: ReadonlyMap<string, Point>, targets: Iterable<string>): Focus | null {
   const ids = new Set<string>();
   for (const target of targets) if (target !== graph.root) ids.add(target);
   if (ids.size === 0) return null;
+  const spots = [...ids].flatMap((id) => positions.get(id) ?? []);
+  const center = spots.length
+    ? { x: spots.reduce((sum, at) => sum + at.x, 0) / spots.length, y: spots.reduce((sum, at) => sum + at.y, 0) / spots.length }
+    : null;
   for (const edge of graph.edges) {
     if (ids.has(edge.from) && edge.to !== graph.root) ids.add(edge.to);
     else if (ids.has(edge.to) && edge.from !== graph.root) ids.add(edge.from);
@@ -88,6 +108,6 @@ export function focusBox(graph: Graph, positions: ReadonlyMap<string, Point>, ta
       ? { left: Math.min(box.left, at.x), top: Math.min(box.top, at.y), right: Math.max(box.right, at.x), bottom: Math.max(box.bottom, at.y) }
       : { left: at.x, top: at.y, right: at.x, bottom: at.y };
   }
-  if (!box) return null;
-  return { left: box.left - PAD_X, top: box.top - PAD_Y, right: box.right + PAD_X, bottom: box.bottom + PAD_Y };
+  if (!box || !center) return null;
+  return { left: box.left - PAD_X, top: box.top - PAD_Y, right: box.right + PAD_X, bottom: box.bottom + PAD_Y, center };
 }

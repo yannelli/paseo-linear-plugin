@@ -14,6 +14,8 @@ describe("routes", () => {
     expect(pointAt(path, 0.25)).toEqual({ x: 15, y: 20 });
     expect(pointAt(path, 0.75)).toEqual({ x: 30, y: 65 });
     expect(pointAt(path, 1.2)).toEqual({ x: 30, y: 90 });
+    const offsets = route([{ x: 0, y: 0, dy: -10 }, { x: 0, y: 100, dy: -30 }])!;
+    expect(pointAt(offsets, 0.5)).toEqual({ x: 0, y: 50, dy: -20 });
   });
 
 });

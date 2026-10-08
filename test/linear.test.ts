@@ -275,7 +275,7 @@ describe("agent prompts", () => {
       },
       access: { allProjects: true, projects: {} },
       projects: [],
-      icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false },
+      icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false, menu: "SquareKanban" },
     });
   });
 });

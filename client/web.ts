@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 // The only module that uses the DOM. React wheel listeners are passive, so they cannot keep
 // the page from scrolling while the wheel zooms the graph. Off the web each export does nothing.
 // The file picker is a hidden file input, because plugins cannot use native document pickers.
+// Local storage keeps small values for the next start; it can be missing or blocked.
 
 interface WheelEventLike {
   deltaY: number;
@@ -88,4 +89,35 @@ export function pickTextFile(accept: string, maxBytes: number, onPick: (file: Pi
     );
   };
   input.click();
+}
+
+interface StorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+function storage(): StorageLike | null {
+  if (Platform.OS !== "web") return null;
+  try {
+    return (globalThis as { localStorage?: StorageLike }).localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** A value saved on this device, or null off the web or when storage is blocked. */
+export function readStored(key: string): string | null {
+  try {
+    return storage()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeStored(key: string, value: string): void {
+  try {
+    storage()?.setItem(key, value);
+  } catch {
+    // Blocked storage only means the next start uses the built-in icon first.
+  }
 }

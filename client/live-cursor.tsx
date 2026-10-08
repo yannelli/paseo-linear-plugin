@@ -1,6 +1,7 @@
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Text, View } from "react-native";
+import { type Camera, growth, project } from "../shared/graph-camera";
 import { type Point, pointAt, type Route, route } from "../shared/graph-geometry";
 import { type Graph, graphPath } from "../shared/graph-model";
 import type { CursorAgent } from "./live-agents";
@@ -13,17 +14,34 @@ import type { Theme } from "./ui";
 
 type Coordinate = number | Animated.Value | Animated.AnimatedInterpolation<number>;
 
+/** A node's middle on the canvas, and the pin's offset from it, which grows with the node. */
+export interface Hover extends Point {
+  dx: number;
+  dy: number;
+}
+
 interface Motion {
   x: Coordinate;
   y: Coordinate;
+  dx: Coordinate;
+  dy: Coordinate;
 }
 
 const BADGE = 26;
+/** The pin runs from the badge top to the pointer tip; the pulse rings its middle. */
+const PIN_MIDDLE = 3;
+const RING = 34;
 export const CAPTION_ROOM = 210;
 const MAX_SATELLITES = 3;
 
 function glideTime(length: number): number {
   return Math.min(1200, Math.max(420, 380 + length * 0.8));
+}
+
+/** The caption goes left when it would run past the right edge of the view. */
+export function captionFlips(at: Hover, view: Camera, width: number, height: number): boolean {
+  const grow = growth(view.zoom);
+  return project(view, at, width, height).x + at.dx * grow > width - CAPTION_ROOM * grow;
 }
 
 export interface CursorProps {
@@ -35,11 +53,13 @@ export interface CursorProps {
   /** Changes when node positions change. */
   layoutKey: string;
   /** Where the cursor hovers over a node. */
-  hover(id: string): Point | null;
-  /** Canvas width, to keep the caption inside it. */
+  hover(id: string): Hover | null;
+  /** Canvas size and the settled camera, to keep the caption inside the view. */
   width: number;
-  /** One over the graph zoom, so the cursor keeps its size on screen. */
-  inverse: Animated.AnimatedInterpolation<number>;
+  height: number;
+  view: Camera;
+  /** The camera's item scale, so the cursor grows as nodes do. */
+  itemScale: Animated.AnimatedInterpolation<number>;
   reduce: boolean;
 }
 
@@ -50,31 +70,31 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
   const [halo] = useState(() => new Animated.Value(0));
   const [spin] = useState(() => new Animated.Value(0));
   const [motion, setMotion] = useState<Motion | null>(null);
-  const [flip, setFlip] = useState(false);
+  const [landed, setLanded] = useState<Hover | null>(null);
   const latest = useRef(props);
   latest.current = props;
   // Each glide gets its own value, so binding a new route never jumps to the old start.
-  const active = useRef<{ value: Animated.Value; path: Route; layoutKey: string } | null>(null);
+  const active = useRef<{ value: Animated.Value; path: Route<Hover>; layoutKey: string } | null>(null);
   const state = useRef({
     at: null as string | null,
-    point: null as Point | null,
+    point: null as Hover | null,
     moving: false,
     pending: null as string | null,
   });
 
   // These read only refs, so the animation callbacks never see stale props.
-  const land = (point: Point) => {
+  const land = (point: Hover) => {
     state.current.point = point;
-    setFlip(point.x > latest.current.width - CAPTION_ROOM);
+    setLanded(point);
   };
   const rest = (id: string) => {
     state.current.at = id;
     const point = latest.current.hover(id);
     if (!point) return;
     land(point);
-    setMotion({ x: point.x, y: point.y });
+    setMotion({ x: point.x, y: point.y, dx: point.dx, dy: point.dy });
   };
-  const glide = (points: Point[], to: string) => {
+  const glide = (points: Hover[], to: string) => {
     const path = route(points);
     if (latest.current.reduce || !path) {
       state.current.moving = false;
@@ -85,11 +105,10 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
     const value = new Animated.Value(0);
     active.current = { value, path, layoutKey: latest.current.layoutKey };
     state.current.moving = true;
-    land(path.points[path.points.length - 1] as Point);
-    setMotion({
-      x: value.interpolate({ inputRange: path.stops, outputRange: path.points.map((point) => point.x) }),
-      y: value.interpolate({ inputRange: path.stops, outputRange: path.points.map((point) => point.y) }),
-    });
+    land(path.points[path.points.length - 1] as Hover);
+    const along = (pick: (point: Hover) => number) =>
+      value.interpolate({ inputRange: path.stops, outputRange: path.points.map(pick) });
+    setMotion({ x: along((point) => point.x), y: along((point) => point.y), dx: along((point) => point.dx), dy: along((point) => point.dy) });
     Animated.timing(value, {
       toValue: 1,
       duration: glideTime(path.length),
@@ -135,7 +154,7 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
       if (glideNow.layoutKey === props.layoutKey) return;
       current.pending = null;
       glideNow.value.stopAnimation((share) => glide([pointAt(glideNow.path, share), end], goal));
-    } else if (current.point && (current.point.x !== end.x || current.point.y !== end.y)) {
+    } else if (current.point && ["x", "y", "dx", "dy"].some((key) => current.point?.[key as keyof Hover] !== end[key as keyof Hover])) {
       glide([current.point, end], goal);
     }
   }, [props.layoutKey]);
@@ -178,6 +197,11 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
   }, [satellites, reduce, spin]);
 
   const caption = agent.caption ?? (agent.kind === "child" ? agent.label : null);
+  const flip = landed ? captionFlips(landed, props.view, props.width, props.height) : false;
+  const offset = useMemo(
+    () => (motion ? { transform: [{ translateX: motion.dx }, { translateY: motion.dy }] } : null),
+    [motion],
+  );
   const styles = useMemo(() => {
     const half = BADGE / 2;
     return {
@@ -185,14 +209,15 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
       float: { transform: [{ translateY: bob.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }] },
       halo: {
         position: "absolute",
-        left: -half - 6,
-        top: -half - 6,
-        width: BADGE + 12,
-        height: BADGE + 12,
-        borderRadius: (BADGE + 12) / 2,
-        backgroundColor: agent.color,
-        opacity: halo.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] }),
-        transform: [{ scale: halo.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1.5] }) }],
+        left: -RING / 2,
+        top: PIN_MIDDLE - RING / 2,
+        width: RING,
+        height: RING,
+        borderRadius: RING / 2,
+        borderWidth: 2,
+        borderColor: agent.color,
+        opacity: halo.interpolate({ inputRange: [0, 1], outputRange: [0.6, 0] }),
+        transform: [{ scale: halo.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] }) }],
       },
       badge: {
         position: "absolute",
@@ -261,32 +286,34 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.anchor, { transform: [{ translateX: motion.x }, { translateY: motion.y }, { scale: props.inverse }] }]}
+      style={[styles.anchor, { transform: [{ translateX: motion.x }, { translateY: motion.y }, { scale: props.itemScale }] }]}
     >
-      <Animated.View style={styles.float}>
-        {agent.running ? <Animated.View style={styles.halo} /> : null}
-        {moons.length > 0 ? (
-          <Animated.View style={styles.orbit}>
-            {moons.map((moon, index) => (
-              <View key={index} style={[styles.moon, moon]} />
-            ))}
-          </Animated.View>
-        ) : null}
-        <View style={styles.pointer} />
-        <View style={styles.badge}>
-          {agent.provider ? (
-            <ProviderIcon provider={agent.provider} size={13} color={colors.accentForeground} />
-          ) : (
-            <Icon name="Bot" size={13} color={colors.surface0} />
-          )}
-        </View>
-        {caption ? (
-          <View style={styles.caption}>
-            <Text numberOfLines={1} style={styles.captionText}>
-              {caption}
-            </Text>
+      <Animated.View style={offset}>
+        <Animated.View style={styles.float}>
+          {agent.running ? <Animated.View style={styles.halo} /> : null}
+          {moons.length > 0 ? (
+            <Animated.View style={styles.orbit}>
+              {moons.map((moon, index) => (
+                <View key={index} style={[styles.moon, moon]} />
+              ))}
+            </Animated.View>
+          ) : null}
+          <View style={styles.pointer} />
+          <View style={styles.badge}>
+            {agent.provider ? (
+              <ProviderIcon provider={agent.provider} size={13} color={colors.accentForeground} />
+            ) : (
+              <Icon name="Bot" size={13} color={colors.surface0} />
+            )}
           </View>
-        ) : null}
+          {caption ? (
+            <View style={styles.caption}>
+              <Text numberOfLines={1} style={styles.captionText}>
+                {caption}
+              </Text>
+            </View>
+          ) : null}
+        </Animated.View>
       </Animated.View>
     </Animated.View>
   );

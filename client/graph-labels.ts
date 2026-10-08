@@ -1,4 +1,4 @@
-import { type LabelRequest, labelBox, labelSides, type Placed, type Point, placeLabels } from "../shared/graph-geometry";
+import { type LabelRequest, labelBox, labelSides, type Placed, type Point, placeLabels, type Rect } from "../shared/graph-geometry";
 import { folderCenters, type Graph, type GraphNode } from "../shared/graph-model";
 import type { IssueDetail } from "../shared/linear";
 import { todoStatus } from "../shared/todo-sync";
@@ -52,6 +52,8 @@ export interface LabelInput {
   height: number;
   /** Zoomed in, so files no agent touched get labels too when they fit. */
   every?: boolean;
+  /** Areas covered by controls, such as the camera buttons. */
+  blocked?: readonly Rect[];
 }
 
 function linesOf(node: GraphNode, input: LabelInput): readonly [string, string | null] {
@@ -114,10 +116,11 @@ export function graphLabels(input: LabelInput): { nodes: Map<string, Label>; fol
     requests.push({ id, width, height: 14, spots: [{ left: center.x - width / 2, top: center.top - 30 }, { left: center.x - width / 2, top: center.y - 7 }] });
   }
   for (const node of wanted.filter((entry) => order(entry) > 2)) push(node);
-  const shapes: { at: Point; radius: number }[] = graph.nodes.flatMap((node) => {
+  const shapes: ({ at: Point; radius: number } | Rect)[] = [...(input.blocked ?? [])];
+  for (const node of graph.nodes) {
     const at = positions.get(node.id);
-    return at ? [{ at, radius: nodeSize(node) / 2 }] : [];
-  });
+    if (at) shapes.push({ at, radius: nodeSize(node) / 2 });
+  }
   // Keep labels out from under the agents and their captions, as a row of small circles.
   for (const cursor of input.cursors) {
     shapes.push({ at: cursor.at, radius: 16 });

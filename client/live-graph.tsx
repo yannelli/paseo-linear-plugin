@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
-import { focusBox, project, unproject } from "../shared/graph-camera";
+import { focusBox, growth, project, unproject } from "../shared/graph-camera";
 import type { Placed, Point } from "../shared/graph-geometry";
 import { focusNode, type Graph, type GraphEdge, type GraphNode, graphKey, layoutGraph } from "../shared/graph-model";
 import { type AreaRef, whereLabel } from "../shared/knowledge";
@@ -9,7 +9,7 @@ import type { GraphCamera } from "../shared/settings";
 import { CameraButtons, useGraphCamera } from "./graph-camera";
 import { captionWidth, graphLabels, HOVER_GAP, type Label, nodeSize } from "./graph-labels";
 import type { CursorAgent } from "./live-agents";
-import { AgentCursor, CAPTION_ROOM } from "./live-cursor";
+import { AgentCursor, captionFlips, type Hover } from "./live-cursor";
 import { type IssueProgress, MONO } from "./live-issues";
 import type { LivePatch } from "./live-panel";
 import { NATIVE_DRIVER, type OwnerColors } from "./live-timeline";
@@ -41,9 +41,11 @@ export interface GraphViewProps {
   reduceMotion: boolean;
 }
 
-type Inverse = Animated.AnimatedInterpolation<number>;
+type ItemScale = Animated.AnimatedInterpolation<number>;
 /** About half the height of a folder name, which scales around its middle. */
 const FOLDER_HALF = 7;
+/** The camera buttons in the top right corner, with a margin; labels stay out of it. */
+const TOOLBAR = { width: 160, height: 44 };
 
 interface EdgeStyle {
   color: string;
@@ -55,7 +57,7 @@ interface EdgeProps {
   from: Point;
   to: Point;
   style: EdgeStyle;
-  inverse: Inverse;
+  itemScale: ItemScale;
 }
 
 const EdgeLine = memo(function EdgeLine(props: EdgeProps) {
@@ -71,15 +73,15 @@ const EdgeLine = memo(function EdgeLine(props: EdgeProps) {
     borderRadius: style.thickness / 2,
     backgroundColor: style.color,
     opacity: style.opacity,
-    // Rotate first, so the inverse zoom thins the line and leaves its length to the camera.
-    transform: [{ rotate: `${angle}rad` }, { scaleY: props.inverse }],
+    // Rotate first, so the item scale sets the thickness and leaves the length to the camera.
+    transform: [{ rotate: `${angle}rad` }, { scaleY: props.itemScale }],
   } as const;
   return <Animated.View pointerEvents="none" style={line} />;
 }, sameEdge);
 
 function sameEdge(a: EdgeProps, b: EdgeProps) {
   return (
-    a.inverse === b.inverse &&
+    a.itemScale === b.itemScale &&
     a.from === b.from &&
     a.to === b.to &&
     a.style.color === b.style.color &&
@@ -99,7 +101,7 @@ interface NodeProps {
   /** An agent is working on it. */
   current: boolean;
   label: Label | null;
-  inverse: Inverse;
+  itemScale: ItemScale;
   reduce: boolean;
   onPress(id: string): void;
 }
@@ -120,7 +122,7 @@ function sameNode(a: NodeProps, b: NodeProps): boolean {
     a.label?.lines[0] === b.label?.lines[0] &&
     a.label?.lines[1] === b.label?.lines[1] &&
     a.theme === b.theme &&
-    a.inverse === b.inverse &&
+    a.itemScale === b.itemScale &&
     a.reduce === b.reduce &&
     a.onPress === b.onPress &&
     x.id === y.id &&
@@ -168,7 +170,7 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
         width: size,
         height: size,
         opacity: props.dim ? 0.22 : 1,
-        transform: [{ scale: props.inverse }],
+        transform: [{ scale: props.itemScale }],
       },
       shape: {
         width: size,
@@ -200,7 +202,7 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
       },
       second: { color: colors.foregroundMuted, fontSize: 10, textAlign: align },
     } as const;
-  }, [node, size, at, color, colors, touched, label, props.dim, props.selected, props.current, props.inverse, enter, beat]);
+  }, [node, size, at, color, colors, touched, label, props.dim, props.selected, props.current, props.itemScale, enter, beat]);
   const press = useCallback(() => props.onPress(node.id), [props.onPress, node.id]);
   return (
     <Animated.View style={styles.wrap} pointerEvents="box-none">
@@ -328,11 +330,11 @@ export function LiveGraph(props: GraphViewProps) {
       targets.map(({ agent, target }) => {
         const slot = seen.get(target) ?? 0;
         seen.set(target, slot + 1);
-        const hover = (id: string): Point | null => {
+        const hover = (id: string): Hover | null => {
           const at = positions.get(id);
           const node = byId.get(id);
           if (!at || !node) return null;
-          return { x: at.x + slot * 30, y: at.y - nodeSize(node) / 2 - HOVER_GAP };
+          return { x: at.x, y: at.y, dx: slot * 30, dy: -nodeSize(node) / 2 - HOVER_GAP };
         };
         return [agent.id, hover] as const;
       }),
@@ -344,9 +346,9 @@ export function LiveGraph(props: GraphViewProps) {
         const at = hovers.get(agent.id)?.(target);
         if (!at) return [];
         const text = agent.caption ?? (agent.kind === "child" ? agent.label : null);
-        return [{ at, caption: captionWidth(text), flip: at.x > width - CAPTION_ROOM }];
+        return [{ at, caption: captionWidth(text) }];
       }),
-    [targets, hovers, width],
+    [targets, hovers],
   );
   const { saveLive } = props;
   const [auto, setAuto] = useState(props.camera === "auto");
@@ -365,18 +367,40 @@ export function LiveGraph(props: GraphViewProps) {
   }, [locked, saveLive]);
   const box = useMemo(() => focusBox(graph, positions, working), [graph, positions, working]);
   const camera = useGraphCamera({ width, height, focus: box, auto, locked, reduce: props.reduceMotion, onManual: stopAuto });
-  // Labels are placed in the view of the settled camera, then moved back onto the canvas.
+  // Labels are placed in the view of the settled camera, in units of the grown items so their
+  // sizes hold, then moved back onto the canvas.
   const view = camera.settled;
   const labels = useMemo(() => {
-    if (view.zoom === 1) return graphLabels({ graph, positions, issue, progress, selected, working, cursors, width, height });
-    const toView = (at: Point) => project(view, at, width, height);
+    const grow = growth(view.zoom);
+    const toView = (at: Point) => {
+      const shown = project(view, at, width, height);
+      return { x: shown.x / grow, y: shown.y / grow };
+    };
     const seen = new Map<string, Placed>();
     for (const [id, at] of positions) {
       const shown = toView(at);
-      if (shown.x > -20 && shown.x < width + 20 && shown.y > -20 && shown.y < height + 20) seen.set(id, { ...at, ...shown });
+      if (shown.x * grow > -20 && shown.x * grow < width + 20 && shown.y * grow > -20 && shown.y * grow < height + 20) {
+        seen.set(id, { ...at, ...shown });
+      }
     }
-    const viewCursors = cursors.map((cursor) => ({ ...cursor, at: toView(cursor.at) }));
-    const placed = graphLabels({ graph, positions: seen, issue, progress, selected, working, cursors: viewCursors, width, height, every: view.zoom >= 1.5 });
+    const viewCursors = cursors.map(({ at, caption }) => {
+      const middle = toView(at);
+      return { at: { x: middle.x + at.dx, y: middle.y + at.dy }, caption, flip: captionFlips(at, view, width, height) };
+    });
+    const toolbar = { left: (width - TOOLBAR.width) / grow, top: 0, right: width / grow, bottom: TOOLBAR.height / grow };
+    const placed = graphLabels({
+      graph,
+      positions: seen,
+      issue,
+      progress,
+      selected,
+      working,
+      cursors: viewCursors,
+      width: width / grow,
+      height: height / grow,
+      every: view.zoom >= 1.5,
+      blocked: [toolbar],
+    });
     const nodes = new Map<string, Label>();
     for (const [id, label] of placed.nodes) {
       const at = positions.get(id);
@@ -384,7 +408,8 @@ export function LiveGraph(props: GraphViewProps) {
       if (at && shown) nodes.set(id, { ...label, left: label.left + at.x - shown.x, top: label.top + at.y - shown.y });
     }
     const folders = placed.folders.map((folder) => {
-      const middle = unproject(view, { x: folder.left + folder.width / 2, y: folder.top + FOLDER_HALF }, width, height);
+      const shown = { x: (folder.left + folder.width / 2) * grow, y: (folder.top + FOLDER_HALF) * grow };
+      const middle = unproject(view, shown, width, height);
       return { ...folder, left: middle.x - folder.width / 2, top: middle.y - FOLDER_HALF };
     });
     return { nodes, folders };
@@ -429,7 +454,7 @@ export function LiveGraph(props: GraphViewProps) {
                 const from = positions.get(edge.from);
                 const to = positions.get(edge.to);
                 if (!from || !to) return null;
-                return <EdgeLine key={edge.id} from={from} to={to} style={edgeStyle(edge)} inverse={camera.inverse} />;
+                return <EdgeLine key={edge.id} from={from} to={to} style={edgeStyle(edge)} itemScale={camera.itemScale} />;
               })
             : null}
           {shown
@@ -440,7 +465,7 @@ export function LiveGraph(props: GraphViewProps) {
                   numberOfLines={1}
                   style={[
                     styles.folder,
-                    { left: folder.left, top: folder.top, width: folder.width, transform: [{ scale: camera.inverse }] },
+                    { left: folder.left, top: folder.top, width: folder.width, transform: [{ scale: camera.itemScale }] },
                   ]}
                 >
                   {folder.folder === "." ? "/" : `${folder.folder}/`}
@@ -463,7 +488,7 @@ export function LiveGraph(props: GraphViewProps) {
                     selected={selected === node.id}
                     current={working.has(node.id)}
                     label={labels.nodes.get(node.id) ?? null}
-                    inverse={camera.inverse}
+                    itemScale={camera.itemScale}
                     reduce={props.reduceMotion}
                     onPress={press}
                   />
@@ -484,7 +509,9 @@ export function LiveGraph(props: GraphViewProps) {
                     layoutKey={layoutKey}
                     hover={hover}
                     width={width}
-                    inverse={camera.inverse}
+                    height={height}
+                    view={view}
+                    itemScale={camera.itemScale}
                     reduce={props.reduceMotion}
                   />
                 );
