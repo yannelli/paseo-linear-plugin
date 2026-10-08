@@ -50,6 +50,8 @@ export interface LabelInput {
   cursors: readonly { at: Point; caption: number; flip: boolean }[];
   width: number;
   height: number;
+  /** Zoomed in, so files no agent touched get labels too when they fit. */
+  every?: boolean;
 }
 
 function linesOf(node: GraphNode, input: LabelInput): readonly [string, string | null] {
@@ -68,10 +70,18 @@ const textWidth = (text: string, perChar: number) => Math.min(MAX_LABEL, text.le
 export function graphLabels(input: LabelInput): { nodes: Map<string, Label>; folders: FolderLabel[] } {
   const { graph, positions, selected, working } = input;
   const order = (node: GraphNode) =>
-    node.id === selected ? 0 : node.kind === "issue" ? 1 : node.kind === "subissue" ? 2 : working.has(node.id) ? 4 : 5;
-  const wanted = graph.nodes
-    .filter((node) => node.kind !== "file" || node.id === selected || working.has(node.id) || (node.tile?.touch ?? "none") !== "none")
-    .sort((a, b) => order(a) - order(b));
+    node.id === selected
+      ? 0
+      : node.kind === "issue"
+        ? 1
+        : node.kind === "subissue"
+          ? 2
+          : working.has(node.id)
+            ? 4
+            : (node.tile?.touch ?? "none") !== "none"
+              ? 5
+              : 6;
+  const wanted = graph.nodes.filter((node) => input.every || order(node) < 6).sort((a, b) => order(a) - order(b));
   const lines = new Map<string, readonly [string, string | null]>();
   const requests: LabelRequest[] = [];
   const push = (node: GraphNode) => {

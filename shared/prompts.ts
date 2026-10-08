@@ -1,5 +1,6 @@
+import { TOOLS_SERVER } from "./agent-tools";
 import type { IssueDetail } from "./linear";
-import type { AgentAction, LinearSettings, ProjectConfig } from "./settings";
+import type { AgentAction, Guidance, LinearSettings, ProjectConfig } from "./settings";
 import { todoConventionLine } from "./todo-sync";
 
 export const DEFAULT_TEMPLATES: Record<AgentAction, string> = {
@@ -112,6 +113,47 @@ export interface ComposePromptInput {
   project: ProjectConfig | null;
   includeComments: boolean;
   extraInstructions: string;
+  /** Launch options that add instructions; the project's saved ones when omitted. */
+  guidance?: Guidance;
+}
+
+/** The instructions each guidance option adds, in prompt order. */
+export function guidanceSections(issue: IssueDetail, guidance: Guidance): string[] {
+  const sections: string[] = [];
+  const example = issue.children[0]?.identifier ?? issue.identifier;
+  if (guidance.updateLinear) {
+    sections.push(
+      [
+        "Keep Linear current while you work:",
+        `- Start each todo with the issue key it is for, such as "${example}: add the form".`,
+        "- Mark a todo in progress when you start it and completed when it is done. Linear Live moves the issue from these todos.",
+        `- Use the ${TOOLS_SERVER} MCP tools: read_issue shows an issue, and edit_issue changes its description.`,
+        "- When you finish a task list item in a description, check it off: replace `- [ ] item` with `- [x] item`.",
+        "- When the plan changes, update the description. Do not post comments.",
+      ].join("\n"),
+    );
+  }
+  if (guidance.subagentKeys) {
+    sections.push(
+      [
+        "When you start a subagent:",
+        `- Begin its description and its prompt with the Linear issue key it works on, such as "${example}: review the form".`,
+        "- Tell it to put that key in the first line of its reply, and to state the new key if its work moves to another issue.",
+      ].join("\n"),
+    );
+  }
+  if (guidance.paseoSubagents) {
+    sections.push(
+      [
+        "Hand off work to Paseo agents, not to your built-in subagent tool:",
+        `- Start each one with the ${TOOLS_SERVER} start_agent tool, one agent for each sub-issue. It runs on your provider and model.`,
+        "- Set its thinking to fit the task: low for search and reading, medium for routine edits, high for design, debugging, and review.",
+        `- Start its title with the issue key, such as "${example}: write the tests". Give the full task in its prompt, because it does not see your conversation.`,
+        "- Call wait_agent for each agent and read its result before you continue.",
+      ].join("\n"),
+    );
+  }
+  return sections;
 }
 
 export function composePrompt(input: ComposePromptInput): string {
@@ -139,6 +181,8 @@ export function composePrompt(input: ComposePromptInput): string {
       `Project steps:\n${steps.map((step, index) => `${index + 1}. ${step}`).join("\n")}`,
     );
   }
+  const guidance = input.guidance ?? project?.guidance;
+  if (guidance) sections.push(...guidanceSections(issue, guidance));
   const extra = input.extraInstructions.trim();
   if (extra) sections.push(`Additional instructions:\n${extra}`);
   return sections.join("\n\n");
@@ -157,6 +201,10 @@ export const AGENT_LABELS = {
   project: "linear.project",
   explore: "linear.explore",
   init: "linear.init",
+  /** The grant of the agent's Linear MCP tools, so a tool call can find its agent. */
+  tools: "linear.tools",
+  /** The grant whose start_agent call made this agent. */
+  startedBy: "linear.started-by",
 } as const;
 
 /** Agents the plugin starts for itself: explore and project setup. */

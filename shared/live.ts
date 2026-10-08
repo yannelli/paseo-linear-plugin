@@ -1,5 +1,6 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
+import { McpHttpServerSchema, ToolPolicySchema } from "./agent-tools";
 import { IssueCardSchema, WorkflowStateSchema } from "./linear";
 
 // Contracts for Linear Live, todo sync, and project setup. Agents the plugin starts for itself
@@ -94,6 +95,13 @@ export const subagentLogsRpc = defineRpc({
   output: z.object({ runs: z.array(SubagentLogSchema) }),
 });
 
+/** Forgets the saved explore map of the agent's issue, so the map falls back to ticket text. */
+export const clearMapRpc = defineRpc({
+  name: "linear.live.map.clear",
+  input: z.object({ agentId: z.string().min(1) }),
+  output: z.object({ cleared: z.boolean() }),
+});
+
 export const liveMapRpc = defineRpc({
   name: "linear.live.map",
   input: z.object({ identifier: z.string().min(1) }),
@@ -110,6 +118,11 @@ export const LaunchConfigSchema = z.object({
   provider: z.string().min(1),
   thinkingOptionId: z.string().optional(),
   modeId: z.string().optional(),
+  /** Only the folder of the issue's Claude Code hooks; see agent-hooks.ts. */
+  providerOptions: z.object({ extraArgs: z.object({ "plugin-dir": z.string().min(1) }) }).optional(),
+  /** Only the plugin's own MCP server; see agent-tools.ts. */
+  mcpServers: z.object({ linear: McpHttpServerSchema }).optional(),
+  toolPolicy: ToolPolicySchema.optional(),
 });
 
 // The daemon maps the files first and then starts the agent, so closing the app mid-way

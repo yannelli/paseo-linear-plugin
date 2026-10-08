@@ -1,12 +1,16 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
+import { focusBox, project, unproject } from "../shared/graph-camera";
 import type { Placed, Point } from "../shared/graph-geometry";
 import { focusNode, type Graph, type GraphEdge, type GraphNode, graphKey, layoutGraph } from "../shared/graph-model";
 import type { IssueDetail, WorkflowState } from "../shared/linear";
+import type { GraphCamera } from "../shared/settings";
+import { CameraButtons, useGraphCamera } from "./graph-camera";
 import { captionWidth, graphLabels, HOVER_GAP, type Label, nodeSize } from "./graph-labels";
 import type { CursorAgent } from "./live-agents";
 import { AgentCursor, CAPTION_ROOM } from "./live-cursor";
 import { type IssueProgress, MONO } from "./live-issues";
+import type { LivePatch } from "./live-panel";
 import { NATIVE_DRIVER, type OwnerColors } from "./live-timeline";
 import { StateIcon, type Theme } from "./ui";
 
@@ -27,8 +31,16 @@ export interface GraphViewProps {
   agents: readonly CursorAgent[];
   focus: string | null;
   onFocus(key: string): void;
+  /** Saved camera mode: follow the running agents, or show the whole graph. */
+  camera: GraphCamera;
+  locked: boolean;
+  saveLive(patch: LivePatch): void;
   reduceMotion: boolean;
 }
+
+type Inverse = Animated.AnimatedInterpolation<number>;
+/** About half the height of a folder name, which scales around its middle. */
+const FOLDER_HALF = 7;
 
 interface EdgeStyle {
   color: string;
@@ -36,7 +48,14 @@ interface EdgeStyle {
   opacity: number;
 }
 
-const EdgeLine = memo(function EdgeLine(props: { from: Point; to: Point; style: EdgeStyle }) {
+interface EdgeProps {
+  from: Point;
+  to: Point;
+  style: EdgeStyle;
+  inverse: Inverse;
+}
+
+const EdgeLine = memo(function EdgeLine(props: EdgeProps) {
   const { from, to, style } = props;
   const length = Math.hypot(to.x - from.x, to.y - from.y);
   const angle = Math.atan2(to.y - from.y, to.x - from.x);
@@ -49,13 +68,15 @@ const EdgeLine = memo(function EdgeLine(props: { from: Point; to: Point; style: 
     borderRadius: style.thickness / 2,
     backgroundColor: style.color,
     opacity: style.opacity,
-    transform: [{ rotate: `${angle}rad` }],
+    // Rotate first, so the inverse zoom thins the line and leaves its length to the camera.
+    transform: [{ rotate: `${angle}rad` }, { scaleY: props.inverse }],
   } as const;
-  return <View pointerEvents="none" style={line} />;
+  return <Animated.View pointerEvents="none" style={line} />;
 }, sameEdge);
 
-function sameEdge(a: { from: Point; to: Point; style: EdgeStyle }, b: { from: Point; to: Point; style: EdgeStyle }) {
+function sameEdge(a: EdgeProps, b: EdgeProps) {
   return (
+    a.inverse === b.inverse &&
     a.from === b.from &&
     a.to === b.to &&
     a.style.color === b.style.color &&
@@ -75,6 +96,7 @@ interface NodeProps {
   /** An agent is working on it. */
   current: boolean;
   label: Label | null;
+  inverse: Inverse;
   reduce: boolean;
   onPress(id: string): void;
 }
@@ -95,6 +117,7 @@ function sameNode(a: NodeProps, b: NodeProps): boolean {
     a.label?.lines[0] === b.label?.lines[0] &&
     a.label?.lines[1] === b.label?.lines[1] &&
     a.theme === b.theme &&
+    a.inverse === b.inverse &&
     a.reduce === b.reduce &&
     a.onPress === b.onPress &&
     x.id === y.id &&
@@ -142,6 +165,7 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
         width: size,
         height: size,
         opacity: props.dim ? 0.22 : 1,
+        transform: [{ scale: props.inverse }],
       },
       shape: {
         width: size,
@@ -173,10 +197,10 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
       },
       second: { color: colors.foregroundMuted, fontSize: 10, textAlign: align },
     } as const;
-  }, [node, size, at, color, colors, touched, label, props.dim, props.selected, props.current, enter, beat]);
+  }, [node, size, at, color, colors, touched, label, props.dim, props.selected, props.current, props.inverse, enter, beat]);
   const press = useCallback(() => props.onPress(node.id), [props.onPress, node.id]);
   return (
-    <View style={styles.wrap} pointerEvents="box-none">
+    <Animated.View style={styles.wrap} pointerEvents="box-none">
       <Pressable accessibilityRole="button" accessibilityLabel={node.path ?? node.label} hitSlop={8} onPress={press}>
         <Animated.View style={styles.shape}>
           {node.kind !== "file" ? <View style={styles.tint} /> : null}
@@ -195,7 +219,7 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
           ) : null}
         </View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }, sameNode);
 
@@ -246,7 +270,12 @@ export function LiveGraph(props: GraphViewProps) {
     return map;
   }, [graph.root, issue]);
   const targets = useMemo(
-    () => props.agents.map((agent) => ({ agent, target: focusNode(graph, agent.focus) })),
+    () =>
+      props.agents.map((agent) => {
+        const target = focusNode(graph, agent.focus);
+        // A child agent whose file is off the graph hovers over the issue it works on.
+        return { agent, target: target === graph.root && agent.home ? focusNode(graph, agent.home) : target };
+      }),
     [props.agents, graph],
   );
   const working = useMemo(
@@ -316,10 +345,47 @@ export function LiveGraph(props: GraphViewProps) {
       }),
     [targets, hovers, width],
   );
-  const labels = useMemo(
-    () => graphLabels({ graph, positions, issue, progress, selected, working, cursors, width, height }),
-    [graph.nodes, positions, issue, progress, selected, working, cursors, width, height],
-  );
+  const { saveLive } = props;
+  const [auto, setAuto] = useState(props.camera === "auto");
+  const [locked, setLocked] = useState(props.locked);
+  const stopAuto = useCallback(() => {
+    setAuto(false);
+    saveLive({ graphCamera: "fit" });
+  }, [saveLive]);
+  const toggleAuto = useCallback(() => {
+    setAuto(!auto);
+    saveLive({ graphCamera: auto ? "fit" : "auto" });
+  }, [auto, saveLive]);
+  const toggleLock = useCallback(() => {
+    setLocked(!locked);
+    saveLive({ graphLocked: !locked });
+  }, [locked, saveLive]);
+  const box = useMemo(() => focusBox(graph, positions, working), [graph, positions, working]);
+  const camera = useGraphCamera({ width, height, focus: box, auto, locked, reduce: props.reduceMotion, onManual: stopAuto });
+  // Labels are placed in the view of the settled camera, then moved back onto the canvas.
+  const view = camera.settled;
+  const labels = useMemo(() => {
+    if (view.zoom === 1) return graphLabels({ graph, positions, issue, progress, selected, working, cursors, width, height });
+    const toView = (at: Point) => project(view, at, width, height);
+    const seen = new Map<string, Placed>();
+    for (const [id, at] of positions) {
+      const shown = toView(at);
+      if (shown.x > -20 && shown.x < width + 20 && shown.y > -20 && shown.y < height + 20) seen.set(id, { ...at, ...shown });
+    }
+    const viewCursors = cursors.map((cursor) => ({ ...cursor, at: toView(cursor.at) }));
+    const placed = graphLabels({ graph, positions: seen, issue, progress, selected, working, cursors: viewCursors, width, height, every: view.zoom >= 1.5 });
+    const nodes = new Map<string, Label>();
+    for (const [id, label] of placed.nodes) {
+      const at = positions.get(id);
+      const shown = seen.get(id);
+      if (at && shown) nodes.set(id, { ...label, left: label.left + at.x - shown.x, top: label.top + at.y - shown.y });
+    }
+    const folders = placed.folders.map((folder) => {
+      const middle = unproject(view, { x: folder.left + folder.width / 2, y: folder.top + FOLDER_HALF }, width, height);
+      return { ...folder, left: middle.x - folder.width / 2, top: middle.y - FOLDER_HALF };
+    });
+    return { nodes, folders };
+  }, [graph.nodes, positions, issue, progress, selected, working, cursors, width, height, view]);
   const press = useCallback(
     (id: string) => {
       setSelected((current) => (current === id ? null : id));
@@ -332,6 +398,7 @@ export function LiveGraph(props: GraphViewProps) {
     () =>
       ({
         canvas: { height, width: "100%", overflow: "hidden" },
+        world: { ...StyleSheet.absoluteFillObject, transform: camera.transform },
         waiting: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
         waitingText: { color: colors.foregroundMuted, fontSize: 12 },
         folder: { position: "absolute", color: colors.foregroundMuted, fontFamily: MONO, fontSize: 10, opacity: 0.75 },
@@ -346,79 +413,96 @@ export function LiveGraph(props: GraphViewProps) {
         captionText: { color: colors.foreground, fontSize: 12, fontFamily: MONO },
         hint: { color: colors.foregroundMuted, fontSize: 12 },
       }) as const,
-    [height, colors],
+    [height, colors, camera.transform],
   );
   const selectedNode = selected ? byId.get(selected) : undefined;
   const ordered = [...graph.edges].sort((a, b) => Number(trail.has(a.id)) - Number(trail.has(b.id)));
   return (
     <View>
-      <View style={styles.canvas} onLayout={measure}>
+      <View ref={camera.ref} style={styles.canvas} onLayout={measure} {...camera.handlers}>
+        <Animated.View pointerEvents="box-none" style={styles.world}>
+          {shown
+            ? ordered.map((edge) => {
+                const from = positions.get(edge.from);
+                const to = positions.get(edge.to);
+                if (!from || !to) return null;
+                return <EdgeLine key={edge.id} from={from} to={to} style={edgeStyle(edge)} inverse={camera.inverse} />;
+              })
+            : null}
+          {shown
+            ? labels.folders.map((folder) => (
+                <Animated.Text
+                  key={folder.folder}
+                  pointerEvents="none"
+                  numberOfLines={1}
+                  style={[
+                    styles.folder,
+                    { left: folder.left, top: folder.top, width: folder.width, transform: [{ scale: camera.inverse }] },
+                  ]}
+                >
+                  {folder.folder === "." ? "/" : `${folder.folder}/`}
+                </Animated.Text>
+              ))
+            : null}
+          {shown
+            ? graph.nodes.map((node) => {
+                const at = positions.get(node.id);
+                if (!at) return null;
+                return (
+                  <GraphNodeView
+                    key={node.id}
+                    theme={theme}
+                    node={node}
+                    at={at}
+                    color={nodeColor(node)}
+                    state={states.get(node.id) ?? null}
+                    dim={dimmed(node)}
+                    selected={selected === node.id}
+                    current={working.has(node.id)}
+                    label={labels.nodes.get(node.id) ?? null}
+                    inverse={camera.inverse}
+                    reduce={props.reduceMotion}
+                    onPress={press}
+                  />
+                );
+              })
+            : null}
+          {shown
+            ? targets.map(({ agent, target }) => {
+                const hover = hovers.get(agent.id);
+                if (!hover) return null;
+                return (
+                  <AgentCursor
+                    key={agent.id}
+                    theme={theme}
+                    agent={agent}
+                    graph={graph}
+                    target={target}
+                    layoutKey={layoutKey}
+                    hover={hover}
+                    width={width}
+                    inverse={camera.inverse}
+                    reduce={props.reduceMotion}
+                  />
+                );
+              })
+            : null}
+        </Animated.View>
         {!ready ? (
           <View style={styles.waiting}>
             <Text style={styles.waitingText}>Linking files…</Text>
           </View>
         ) : null}
-        {shown
-          ? ordered.map((edge) => {
-              const from = positions.get(edge.from);
-              const to = positions.get(edge.to);
-              if (!from || !to) return null;
-              return <EdgeLine key={edge.id} from={from} to={to} style={edgeStyle(edge)} />;
-            })
-          : null}
-        {shown
-          ? labels.folders.map((folder) => (
-              <Text
-                key={folder.folder}
-                pointerEvents="none"
-                numberOfLines={1}
-                style={[styles.folder, { left: folder.left, top: folder.top, width: folder.width }]}
-              >
-                {folder.folder === "." ? "/" : `${folder.folder}/`}
-              </Text>
-            ))
-          : null}
-        {shown
-          ? graph.nodes.map((node) => {
-              const at = positions.get(node.id);
-              if (!at) return null;
-              return (
-                <GraphNodeView
-                  key={node.id}
-                  theme={theme}
-                  node={node}
-                  at={at}
-                  color={nodeColor(node)}
-                  state={states.get(node.id) ?? null}
-                  dim={dimmed(node)}
-                  selected={selected === node.id}
-                  current={working.has(node.id)}
-                  label={labels.nodes.get(node.id) ?? null}
-                  reduce={props.reduceMotion}
-                  onPress={press}
-                />
-              );
-            })
-          : null}
-        {shown
-          ? targets.map(({ agent, target }) => {
-              const hover = hovers.get(agent.id);
-              if (!hover) return null;
-              return (
-                <AgentCursor
-                  key={agent.id}
-                  theme={theme}
-                  agent={agent}
-                  graph={graph}
-                  target={target}
-                  layoutKey={layoutKey}
-                  hover={hover}
-                  width={width}
-                  reduce={props.reduceMotion}
-                />
-              );
-            })
-          : null}
+        {shown ? (
+          <CameraButtons
+            theme={theme}
+            camera={camera}
+            auto={auto}
+            locked={locked}
+            onAuto={toggleAuto}
+            onLock={toggleLock}
+          />
+        ) : null}
       </View>
       <View style={styles.caption}>
         {selectedNode ? (

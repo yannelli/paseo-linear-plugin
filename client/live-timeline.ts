@@ -1,11 +1,12 @@
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
-import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AccessibilityInfo, Platform } from "react-native";
 import type { DirTouch, FileTouch, TimelineItemLike } from "../shared/activity";
 import type { IssueDetail } from "../shared/linear";
 import type { FileLink } from "../shared/links";
 import {
+  clearMapRpc,
   exploreRpc,
   type IssueMap,
   type Job,
@@ -246,6 +247,11 @@ export interface LiveMap {
   starting: boolean;
   error: string | null;
   explore(force: boolean): void;
+  /** Reads the map, folder listings, links, and subagents again. */
+  refresh(): void;
+  /** Forgets the saved explore map; the map falls back to the ticket text. */
+  clear(): void;
+  clearing: boolean;
 }
 
 export function useLiveMap(
@@ -272,9 +278,13 @@ export function useLiveMap(
     onSettled: () => void refetch(),
   });
   const { mutate } = explore;
+  const queries = useQueryClient();
+  const refresh = useCallback(() => void queries.invalidateQueries({ queryKey: ["linear", "live"] }), [queries]);
+  const clearMap = useRpc(clearMapRpc);
+  const clear = useMutation({ mutationFn: () => clearMap({ agentId }), onSettled: refresh });
   const fallback = useMemo(() => semanticMap(issue), [issue]);
   const stored = query.data?.map ?? null;
-  const failure = explore.error ?? query.error;
+  const failure = explore.error ?? clear.error ?? query.error;
   return {
     map: stored ?? fallback,
     stored: stored !== null,
@@ -283,6 +293,9 @@ export function useLiveMap(
     starting: explore.isPending,
     error: failure ? errorMessage(failure) : null,
     explore: mutate,
+    refresh,
+    clear: clear.mutate as () => void,
+    clearing: clear.isPending,
   };
 }
 

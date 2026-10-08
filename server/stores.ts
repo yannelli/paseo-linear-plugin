@@ -13,7 +13,7 @@ interface JsonFile<T> {
   update<R>(change: (current: T) => { next: T; result: R }): Promise<R>;
 }
 
-function createJsonFile<T>(file: string, schema: ZodType<T>, empty: () => T): JsonFile<T> {
+export function createJsonFile<T>(file: string, schema: ZodType<T>, empty: () => T): JsonFile<T> {
   let value: T | null = null;
   let queue: Promise<unknown> = Promise.resolve();
   async function load(): Promise<T> {
@@ -51,6 +51,7 @@ function createJsonFile<T>(file: string, schema: ZodType<T>, empty: () => T): Js
 export interface MapStore {
   get(identifier: string): Promise<IssueMap | null>;
   set(map: IssueMap): Promise<void>;
+  delete(identifier: string): Promise<void>;
 }
 
 /** Explore maps survive daemon restarts, so a finished explore run is never paid for twice. */
@@ -70,6 +71,12 @@ export function createMapStore(file: string): MapStore {
           .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
           .slice(0, MAX_MAPS);
         return { next: Object.fromEntries(kept.map((entry) => [entry.identifier, entry])), result: undefined };
+      });
+    },
+    delete(identifier) {
+      return store.update((current) => {
+        const { [identifier]: _removed, ...rest } = current;
+        return { next: rest, result: undefined };
       });
     },
   };

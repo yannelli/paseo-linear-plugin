@@ -6,13 +6,13 @@ import { type LayoutChangeEvent, Text, View } from "react-native";
 import { deriveActivity } from "../shared/activity";
 import type { IssueDetail } from "../shared/linear";
 import { AGENT_LABELS } from "../shared/prompts";
-import { type LinearSettings, type LiveView, linearSettings, type MappingMode } from "../shared/settings";
+import { type GraphCamera, type LinearSettings, type LiveView, linearSettings, type MappingMode } from "../shared/settings";
 import { KeyScopeProvider } from "./key-scope";
 import { buildGraph, graphFiles } from "../shared/graph-model";
 import { AgentsList, cursorAgents, useLiveAgents } from "./live-agents";
 import { ActivityFeed } from "./live-feed";
 import { LiveGraph } from "./live-graph";
-import { LiveHeader, MapSource, ViewToggle } from "./live-header";
+import { LiveHeader, MapActions, MapSource, ViewToggle } from "./live-header";
 import { type FocusKey, IssueRail, issueProgress, SubIssues } from "./live-issues";
 import { MapLegend, RepoMap } from "./live-map";
 import {
@@ -33,6 +33,7 @@ interface AgentInfo {
   identifier: string | null;
   project: string | null;
   cwd: string;
+  workspaceId: string | null;
   status: AgentStatus;
   provider: string;
 }
@@ -41,11 +42,14 @@ const selectAgent = (agent: PluginAgentSnapshot): AgentInfo => ({
   identifier: agent.labels[AGENT_LABELS.issue] ?? null,
   project: agent.labels[AGENT_LABELS.project] ?? null,
   cwd: agent.cwd,
+  workspaceId: agent.workspaceId ?? null,
   status: agent.status,
   provider: agent.provider,
 });
 
-type LivePatch = Partial<Pick<LinearSettings["live"], "view" | "issuesCollapsed">>;
+export type LivePatch = Partial<
+  Pick<LinearSettings["live"], "view" | "issuesCollapsed" | "graphCamera" | "graphLocked">
+>;
 
 const STACK_WIDTH = 760;
 const COLUMN_WIDTH = 330;
@@ -103,6 +107,8 @@ export function LivePanel(props: PluginAgentPanelProps) {
         mapping={live?.mapping ?? "semantic"}
         view={live?.view ?? "map"}
         issuesCollapsed={live?.issuesCollapsed ?? false}
+        graphCamera={live?.graphCamera ?? "auto"}
+        graphLocked={live?.graphLocked ?? false}
         saveLive={saveLive}
         openAgent={props.navigation ? (id) => props.navigation?.openAgent({ agentId: id }) : undefined}
       />
@@ -119,6 +125,8 @@ interface BodyProps {
   mapping: MappingMode;
   view: LiveView;
   issuesCollapsed: boolean;
+  graphCamera: GraphCamera;
+  graphLocked: boolean;
   saveLive(patch: LivePatch): void;
   openAgent?: (agentId: string) => void;
 }
@@ -206,6 +214,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     theme,
     agentId,
     cwd: agent.cwd,
+    workspaceId: agent.workspaceId,
     status: agent.status,
     provider: agent.provider,
     activity,
@@ -330,6 +339,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
       right={
         <View style={styles.tools}>
           {stacked || view === "graph" ? null : <MapLegend theme={theme} />}
+          <MapActions theme={theme} live={liveMap} />
           {toggle}
         </View>
       }
@@ -354,6 +364,9 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
             agents={cursors}
             focus={focus}
             onFocus={toggleFocus}
+            camera={props.graphCamera}
+            locked={props.graphLocked}
+            saveLive={saveLive}
             reduceMotion={reduceMotion}
           />
         ) : (

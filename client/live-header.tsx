@@ -10,6 +10,7 @@ import { eventTone, KIND_ICONS } from "./live-feed";
 import { type IssueProgress, MONO, ProgressBar } from "./live-issues";
 import { type LiveMap, NATIVE_DRIVER, type OwnerColors } from "./live-timeline";
 import { ProviderIcon } from "./provider-icon";
+import { ToolButton, ToolGroup } from "./tool-buttons";
 import { Button, StateIcon, type Theme } from "./ui";
 
 type AgentStatus = PluginAgentSnapshot["status"];
@@ -253,6 +254,34 @@ export function MapSource(props: { theme: Theme; live: LiveMap; mapping: Mapping
       ) : null}
       {live.error ? <Text style={styles.error}>{live.error}</Text> : null}
     </View>
+  );
+}
+
+/** Read the file data again, rebuild the map with the explore agent, or clear the saved map. */
+export function MapActions(props: { theme: Theme; live: LiveMap }) {
+  const { theme, live } = props;
+  const { explore, refresh, clear } = live;
+  const running = live.job?.status === "running";
+  const rebuild = useCallback(() => explore(true), [explore]);
+  return (
+    <ToolGroup theme={theme}>
+      <ToolButton theme={theme} icon="RefreshCw" label="Read files and links again" onPress={refresh} />
+      <ToolButton
+        theme={theme}
+        icon="Sparkles"
+        label={live.stored ? "Rebuild the map with the explore agent" : "Build the map with the explore agent"}
+        busy={live.starting || running}
+        onPress={rebuild}
+      />
+      <ToolButton
+        theme={theme}
+        icon="Eraser"
+        label="Clear the saved map and use the ticket text"
+        disabled={!live.stored || running}
+        busy={live.clearing}
+        onPress={clear}
+      />
+    </ToolGroup>
   );
 }
 
