@@ -16,6 +16,7 @@ import { accessRpc, linearSettings, projectEnabled } from "../shared/settings";
 import { progressByKey } from "../shared/todo-sync";
 import { currentAccess, onAccessChange, publishAccess } from "./access";
 import { KeyScopeProvider } from "./key-scope";
+import { MONO } from "./live-issues";
 import { useIssue } from "./queries";
 import { focusIssue, panelScope } from "./store";
 import { Button, errorMessage, StateIcon, type Theme } from "./ui";
@@ -58,9 +59,10 @@ function textStyles(theme: Theme, compact: boolean) {
   return {
     body: { width: compact ? ("100%" as const) : 320, gap: 6 },
     title: { color: colors.foreground, fontSize: 13, fontWeight: "600" as const, flexShrink: 1 },
-    plain: { color: colors.foreground, fontSize: 13, flexShrink: 1 },
+    plain: { color: colors.foreground, fontSize: 13, flex: 1, minWidth: 0 },
     child: { color: colors.foreground, fontSize: 12, flex: 1 },
-    key: { color: colors.foregroundMuted, fontSize: 12 },
+    // Keys never wrap, and a fixed column lines the titles up.
+    key: { color: colors.foregroundMuted, fontSize: 12, fontFamily: MONO, flexShrink: 0, minWidth: 64 },
     muted: { color: colors.foregroundMuted, fontSize: 12 },
     danger: { color: colors.statusDanger, fontSize: 12 },
     row: { flexDirection: "row" as const, alignItems: "center" as const, gap: 8, paddingVertical: 5 },
@@ -113,7 +115,9 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
           return (
             <View key={child.id} style={styles.row}>
               <StateIcon state={child.state} size={14} />
-              <Text style={styles.key}>{child.identifier}</Text>
+              <Text numberOfLines={1} style={styles.key}>
+                {child.identifier}
+              </Text>
               <Text numberOfLines={1} style={styles.child}>
                 {child.title}
               </Text>
@@ -247,7 +251,9 @@ function SendIssue({ theme, layout, agentId, close }: ContentProps) {
               pressed ? { backgroundColor: theme.colors.surface2 } : null,
             ]}
           >
-            <Text style={styles.key}>{item.identifier}</Text>
+            <Text numberOfLines={1} style={styles.key}>
+              {item.identifier}
+            </Text>
             <Text numberOfLines={1} style={styles.plain}>
               {item.title}
             </Text>

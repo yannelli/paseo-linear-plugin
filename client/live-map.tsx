@@ -271,23 +271,26 @@ export function RepoMap(props: RepoMapProps) {
         zones: { flexDirection: "row", gap: ZONE_GAP, alignItems: "flex-start" },
         column: { flex: 1, minWidth: 0, gap: ZONE_GAP },
         empty: { color: colors.foregroundMuted, fontSize: 13 },
+        hidden: { opacity: 0 },
       }) as const,
     [colors],
   );
-  if (props.model.zones.length === 0) {
-    return (
-      <Text style={styles.empty}>No files on the map yet. Files the agent opens show here.</Text>
-    );
-  }
+  // The measured View stays mounted, so the first files do not draw in one column and then reflow.
   return (
-    <View style={styles.zones} onLayout={measure}>
-      {groups.map((group, index) => (
-        <View key={index} style={styles.column}>
-          {group.map((zone) => (
-            <Zone key={zone.dir} {...props} zone={zone} />
+    <View onLayout={measure}>
+      {props.model.zones.length === 0 ? (
+        <Text style={styles.empty}>No files on the map yet. Files the agent opens show here.</Text>
+      ) : (
+        <View style={[styles.zones, width > 0 ? null : styles.hidden]}>
+          {groups.map((group, index) => (
+            <View key={index} style={styles.column}>
+              {group.map((zone) => (
+                <Zone key={zone.dir} {...props} zone={zone} />
+              ))}
+            </View>
           ))}
         </View>
-      ))}
+      )}
     </View>
   );
 }

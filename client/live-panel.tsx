@@ -8,7 +8,7 @@ import type { IssueDetail } from "../shared/linear";
 import { AGENT_LABELS } from "../shared/prompts";
 import { type LinearSettings, type LiveView, linearSettings, type MappingMode } from "../shared/settings";
 import { KeyScopeProvider } from "./key-scope";
-import { buildGraph } from "../shared/graph-model";
+import { buildGraph, graphFiles } from "../shared/graph-model";
 import { AgentsList, cursorAgents, useLiveAgents } from "./live-agents";
 import { ActivityFeed } from "./live-feed";
 import { LiveGraph } from "./live-graph";
@@ -18,6 +18,7 @@ import { MapLegend, RepoMap } from "./live-map";
 import {
   ownerColors,
   useAgentTimeline,
+  useFileLinks,
   useLiveMap,
   useMapModel,
   useReduceMotion,
@@ -210,6 +211,9 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     activity,
   });
   const model = useMapModel(agentId, liveMap.map.files, agents.files, agents.dirs);
+  // Hold the map until its first full data, so it does not draw once and then swap.
+  const mapShown = useRef(false);
+  if (liveMap.ready && model.ready) mapShown.current = true;
   const [view, setView] = useState<LiveView>(props.view);
   const [collapsed, setCollapsed] = useState(props.issuesCollapsed);
   const { saveLive } = props;
@@ -225,14 +229,25 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     saveLive({ issuesCollapsed: !collapsed });
   }, [collapsed, saveLive]);
   const working = agent.status === "running";
-  const graph = useMemo(() => {
-    if (view !== "graph") return null;
-    return buildGraph({
+  const graphInput = useMemo(
+    () => ({
       issue: issue.identifier,
       children: issue.children.map((child) => child.identifier),
       tiles: model.zones.flatMap((zone) => zone.tiles),
-    });
-  }, [view, issue, model.zones]);
+    }),
+    [issue, model.zones],
+  );
+  const graphPaths = useMemo(
+    () => (view === "graph" ? graphFiles(graphInput).tiles.map((tile) => tile.path) : []),
+    [view, graphInput],
+  );
+  // Each edit can add or drop an import, so the links are read again.
+  const edits = graphInput.tiles.reduce((sum, tile) => sum + tile.added + tile.removed, 0);
+  const links = useFileLinks(agentId, graphPaths, edits, view === "graph");
+  const graph = useMemo(
+    () => (view === "graph" ? buildGraph({ ...graphInput, links: links.links }) : null),
+    [view, graphInput, links.links],
+  );
   const cursors = useMemo(
     () => cursorAgents({ theme, provider: agent.provider, working, activity, children: agents.children }),
     [theme, agent.provider, working, activity, agents.children],
@@ -270,6 +285,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
         hit: { color: colors.foregroundMuted, fontSize: 12 },
         tools: { flexDirection: "row", alignItems: "center", gap: 12 },
         mapHead: { gap: 8 },
+        mapWait: { minHeight: 240, alignItems: "center", justifyContent: "center" },
       }) as const,
     [colors],
   );
@@ -302,7 +318,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     <Card
       theme={theme}
       title={view === "graph" ? "Graph" : "Repository map"}
-      meta={<MapSource theme={theme} live={liveMap} mapping={props.mapping} />}
+      meta={mapShown.current ? <MapSource theme={theme} live={liveMap} mapping={props.mapping} /> : null}
       right={
         <View style={styles.tools}>
           {stacked || view === "graph" ? null : <MapLegend theme={theme} />}
@@ -310,6 +326,11 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
         </View>
       }
     >
+      {!mapShown.current ? (
+        <View style={styles.mapWait}>
+          <Text style={styles.hit}>Loading map…</Text>
+        </View>
+      ) : (
       <View style={styles.mapHead}>
         <Text style={styles.hit}>{hitRateLine(model)}</Text>
         {graph ? (
@@ -318,6 +339,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
             compact={stacked}
             full={collapsed && !stacked}
             graph={graph}
+            ready={links.ready}
             issue={issue}
             progress={progress}
             owners={owners}
@@ -338,6 +360,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
           />
         )}
       </View>
+      )}
     </Card>
   );
   const feed = (

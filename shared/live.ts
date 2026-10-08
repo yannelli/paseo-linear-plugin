@@ -53,6 +53,17 @@ export const listFilesRpc = defineRpc({
   }),
 });
 
+export const MAX_LINK_FILES = 200;
+
+/** Imports and other links between the files on the graph. */
+export const linksRpc = defineRpc({
+  name: "linear.live.links",
+  input: z.object({ agentId: z.string().min(1), files: z.array(z.string().min(1)).max(MAX_LINK_FILES) }),
+  output: z.object({
+    links: z.array(z.object({ from: z.string(), to: z.string(), kind: z.enum(["import", "link", "mention"]) })),
+  }),
+});
+
 export const liveMapRpc = defineRpc({
   name: "linear.live.map",
   input: z.object({ identifier: z.string().min(1) }),

@@ -4,12 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import { AccessibilityInfo, Platform } from "react-native";
 import type { DirTouch, FileTouch, TimelineItemLike } from "../shared/activity";
 import type { IssueDetail } from "../shared/linear";
+import type { FileLink } from "../shared/links";
 import {
   exploreRpc,
   type IssueMap,
   type Job,
   listFilesRpc,
+  linksRpc,
   liveMapRpc,
+  MAX_LINK_FILES,
   MAX_LIST_DIRS,
   type MapFile,
   semanticMap,
@@ -180,12 +183,15 @@ export function useAgentTimelines(agentIds: readonly string[]): ReadonlyMap<stri
   const key = agentIds.join(",");
   useEffect(() => {
     const ids = key ? key.split(",") : [];
-    setState(NO_TIMELINES);
+    // Keep the timelines of agents still in the list until their new watch loads, so they do not blink.
+    setState((current) => new Map([...current].filter(([id]) => ids.includes(id))));
     const stops = ids.map((id) =>
       watchTimeline(paseo, id, (update) =>
         setState((current) => {
+          const known = current.get(id);
+          if (update === INITIAL && known) return current;
           const next = new Map(current);
-          next.set(id, typeof update === "function" ? update(current.get(id) ?? INITIAL) : update);
+          next.set(id, typeof update === "function" ? update(known ?? INITIAL) : update);
           return next;
         }),
       ),
@@ -232,6 +238,8 @@ export function ownerColors(issue: IssueDetail, accent: string): OwnerColors {
 export interface LiveMap {
   map: IssueMap;
   stored: boolean;
+  /** The stored map has been read once, so the map no longer swaps from the fallback. */
+  ready: boolean;
   job: Job | null;
   starting: boolean;
   error: string | null;
@@ -268,6 +276,7 @@ export function useLiveMap(
   return {
     map: stored ?? fallback,
     stored: stored !== null,
+    ready: query.data !== undefined || query.isError,
     job: query.data?.job ?? null,
     starting: explore.isPending,
     error: failure ? errorMessage(failure) : null,
@@ -282,7 +291,7 @@ export function useMapModel(
   files: readonly MapFile[],
   touches: readonly FileTouch[],
   explored: readonly DirTouch[],
-): MapModel {
+): MapModel & { ready: boolean } {
   const list = useRpc(listFilesRpc);
   const dirs = useMemo(
     () => zoneDirs(files, touches).slice(0, MAX_LIST_DIRS).sort(),
@@ -299,8 +308,34 @@ export function useMapModel(
     if (!listing.data) return NO_LISTING;
     return new Map(listing.data.dirs.map((entry) => [entry.dir, entry.files]));
   }, [listing.data]);
+  const ready = dirs.length === 0 || listing.data !== undefined || listing.isError;
   return useMemo(
-    () => buildMapModel(files, touches, byDir, explored),
-    [files, touches, byDir, explored],
+    () => ({ ...buildMapModel(files, touches, byDir, explored), ready }),
+    [files, touches, byDir, explored, ready],
   );
+}
+
+const NO_LINKS: readonly FileLink[] = [];
+
+/** Links between the graph's files. `version` changes when files change, to read them again. */
+export function useFileLinks(
+  agentId: string,
+  files: readonly string[],
+  version: number,
+  enabled: boolean,
+): { links: readonly FileLink[]; ready: boolean } {
+  const read = useRpc(linksRpc);
+  const sorted = useMemo(() => [...files].sort().slice(0, MAX_LINK_FILES), [files]);
+  const query = useQuery({
+    queryKey: ["linear", "live", "links", agentId, sorted, version],
+    queryFn: () => read({ agentId, files: sorted }),
+    enabled: enabled && sorted.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+  });
+  return {
+    links: query.data?.links ?? NO_LINKS,
+    // With no files or a failed read the graph shows without links rather than waiting.
+    ready: sorted.length === 0 || query.data !== undefined || query.isError,
+  };
 }

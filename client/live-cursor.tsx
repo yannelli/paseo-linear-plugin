@@ -1,14 +1,15 @@
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, Text, View } from "react-native";
-import { type Graph, type Point, pointAt, type Route, route, treePath } from "../shared/graph-model";
+import { type Point, pointAt, type Route, route } from "../shared/graph-geometry";
+import { type Graph, graphPath } from "../shared/graph-model";
 import type { CursorAgent } from "./live-agents";
 import { NATIVE_DRIVER } from "./live-timeline";
 import { ProviderIcon } from "./provider-icon";
 import type { Theme } from "./ui";
 
-// An agent hovers over the node it works on. When the work moves, it glides along the tree
-// edges, through the nearest shared issue, in one eased motion.
+// An agent hovers over the node it works on. When the work moves, it glides along the shortest
+// walk of imports and issues to the next node, in one eased motion.
 
 type Coordinate = number | Animated.Value | Animated.AnimatedInterpolation<number>;
 
@@ -18,7 +19,7 @@ interface Motion {
 }
 
 const BADGE = 26;
-const CAPTION_ROOM = 210;
+export const CAPTION_ROOM = 210;
 const MAX_SATELLITES = 3;
 
 function glideTime(length: number): number {
@@ -104,7 +105,7 @@ export const AgentCursor = memo(function AgentCursor(props: CursorProps) {
   };
   const go = (from: string, to: string) => {
     const { graph, hover } = latest.current;
-    const points = treePath(graph, from, to).flatMap((id) => {
+    const points = graphPath(graph, from, to).flatMap((id) => {
       const point = hover(id);
       return point ? [point] : [];
     });

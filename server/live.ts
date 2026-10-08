@@ -11,6 +11,7 @@ import {
   type Job,
   type LaunchInput,
   launchAfterExploreRpc,
+  linksRpc,
   listFilesRpc,
   liveMapRpc,
   MAX_DIR_ENTRIES,
@@ -25,6 +26,7 @@ import {
   startInternalRun,
 } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
+import { fileLinks } from "./links";
 import type { LaunchQueue, MapStore } from "./stores";
 
 const EXPLORE_TIMEOUT_MS = 20 * 60_000;
@@ -214,6 +216,11 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
   server.handle(listFilesRpc, async ({ agentId, dirs }, { paseo }) => {
     const agent = await agentInfo(paseo, agentId);
     return { dirs: await listDirectories(agent.cwd, dirs) };
+  });
+
+  server.handle(linksRpc, async ({ agentId, files }, { paseo }) => {
+    const agent = await agentInfo(paseo, agentId);
+    return { links: await fileLinks(agent.cwd, files) };
   });
 
   server.handle(liveMapRpc, async ({ identifier }, { paseo }) => {

@@ -1,33 +1,17 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, type LayoutChangeEvent, Pressable, StyleSheet, Text, View } from "react-native";
-import {
-  focusNode,
-  type Graph,
-  type GraphEdge,
-  type GraphNode,
-  graphKey,
-  type LabelRequest,
-  labelBox,
-  labelSides,
-  type Placed,
-  type Point,
-  placeLabels,
-  treeLayout,
-  treePath,
-} from "../shared/graph-model";
+import type { Placed, Point } from "../shared/graph-geometry";
+import { focusNode, type Graph, type GraphEdge, type GraphNode, graphKey, layoutGraph } from "../shared/graph-model";
 import type { IssueDetail, WorkflowState } from "../shared/linear";
-import { todoStatus } from "../shared/todo-sync";
+import { captionWidth, graphLabels, HOVER_GAP, type Label, nodeSize } from "./graph-labels";
 import type { CursorAgent } from "./live-agents";
-import { AgentCursor } from "./live-cursor";
+import { AgentCursor, CAPTION_ROOM } from "./live-cursor";
 import { type IssueProgress, MONO } from "./live-issues";
 import { NATIVE_DRIVER, type OwnerColors } from "./live-timeline";
 import { StateIcon, type Theme } from "./ui";
 
-// Edges are thin Views rotated to their angle, since plugins have no SVG. The layout comes
-// from the tree alone, so a node keeps its place and an agent can glide between fixed points.
-
-const SIZES = { issue: 46, subissue: 32 } as const;
-const HOVER_GAP = 22;
+// Edges are thin Views rotated to their angle, since plugins have no SVG. Each layout starts
+// from the last one, so nodes stay put as files arrive and an agent glides between them.
 
 export interface GraphViewProps {
   theme: Theme;
@@ -35,6 +19,8 @@ export interface GraphViewProps {
   /** The issues column is collapsed, so the graph can use more height. */
   full: boolean;
   graph: Graph;
+  /** The links between files have loaded at least once. */
+  ready: boolean;
   issue: IssueDetail;
   progress: IssueProgress;
   owners: OwnerColors;
@@ -42,23 +28,6 @@ export interface GraphViewProps {
   focus: string | null;
   onFocus(key: string): void;
   reduceMotion: boolean;
-}
-
-function nodeSize(node: GraphNode): number {
-  if (node.kind !== "file") return SIZES[node.kind];
-  const touched = node.tile && node.tile.touch !== "none";
-  return touched ? (node.tile?.touch === "read" ? 12 : 14) : 9;
-}
-
-function clip(text: string, max: number): string {
-  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
-}
-
-interface Label {
-  left: number;
-  top: number;
-  width: number;
-  lines: readonly [string, string | null];
 }
 
 interface EdgeStyle {
@@ -230,7 +199,7 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
   );
 }, sameNode);
 
-function caption(node: GraphNode, issue: IssueDetail): string {
+function caption(node: GraphNode, issue: IssueDetail, graph: Graph): string {
   if (node.kind === "issue") return `${issue.identifier} · ${issue.title}`;
   if (node.kind === "subissue") {
     const child = issue.children.find((entry) => entry.identifier.toUpperCase() === node.label);
@@ -241,11 +210,13 @@ function caption(node: GraphNode, issue: IssueDetail): string {
   const where = tile?.onMap ? `on the map for ${node.owner}` : "not on the map";
   const touch = !tile || tile.touch === "none" ? "not touched yet" : tile.touch;
   const lines = tile && (tile.added > 0 || tile.removed > 0) ? ` · +${tile.added} -${tile.removed}` : "";
-  return `${node.path} · ${touch} · ${where}${lines}`;
+  const linked = graph.edges.filter((edge) => edge.kind !== "owns" && (edge.from === node.id || edge.to === node.id)).length;
+  const links = linked > 0 ? ` · ${linked} linked ${linked === 1 ? "file" : "files"}` : "";
+  return `${node.path} · ${touch} · ${where}${links}${lines}`;
 }
 
 export function LiveGraph(props: GraphViewProps) {
-  const { theme, graph, owners, focus, issue, progress } = props;
+  const { theme, graph, owners, focus, issue, progress, ready } = props;
   const { colors } = theme;
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -258,10 +229,16 @@ export function LiveGraph(props: GraphViewProps) {
     : props.full
       ? Math.min(820, Math.max(560, 360 + count * 5))
       : Math.min(680, Math.max(460, 300 + count * 4));
-  const key = graphKey(graph);
-  const layoutKey = `${key}@${width}x${height}`;
-  // The layout depends only on the tree and the size; graph changes on every timeline update.
-  const positions = useMemo(() => treeLayout(graph, width, height), [layoutKey]);
+  const shown = ready && width > 0;
+  const layoutKey = `${graphKey(graph)}@${width}x${height}`;
+  const previous = useRef<ReadonlyMap<string, Placed>>(new Map());
+  // The layout depends only on the nodes, edges, and size; graph changes on every timeline update.
+  const positions = useMemo(() => {
+    if (!shown) return new Map<string, Placed>();
+    const next = layoutGraph(graph, width, height, previous.current);
+    previous.current = next;
+    return next;
+  }, [layoutKey, shown]);
   const byId = useMemo(() => new Map(graph.nodes.map((node) => [node.id, node])), [graph.nodes]);
   const states = useMemo(() => {
     const map = new Map<string, WorkflowState>([[graph.root, issue.state]]);
@@ -276,16 +253,16 @@ export function LiveGraph(props: GraphViewProps) {
     () => new Set(targets.filter(({ agent }) => agent.running).map(({ target }) => target)),
     [targets],
   );
-  // The edges from the issue down to what each running agent works on take its color.
+  // The edges at the node a running agent works on take its color.
   const trail = useMemo(() => {
     const lit = new Map<string, string>();
-    for (const { agent, target } of targets) {
-      if (!agent.running) continue;
-      const path = treePath(graph, graph.root, target);
-      path.slice(1).forEach((id, index) => lit.set(`${path[index]}>${id}`, agent.color));
+    const colorOf = new Map(targets.filter(({ agent }) => agent.running).map(({ agent, target }) => [target, agent.color]));
+    for (const edge of graph.edges) {
+      const color = colorOf.get(edge.from) ?? colorOf.get(edge.to);
+      if (color) lit.set(edge.id, color);
     }
     return lit;
-  }, [targets, graph]);
+  }, [targets, graph.edges]);
   const nodeColor = useCallback(
     (node: GraphNode) => (node.owner ? owners.get(node.owner.toUpperCase()) : undefined) ?? colors.foregroundMuted,
     [owners, colors.foregroundMuted],
@@ -296,76 +273,22 @@ export function LiveGraph(props: GraphViewProps) {
     [focus],
   );
   const edgeStyle = (edge: GraphEdge): EdgeStyle => {
-    const to = byId.get(edge.to);
-    const faded = dimmed(to) ? 0.25 : 1;
+    const a = byId.get(edge.from);
+    const b = byId.get(edge.to);
     const lit = trail.get(edge.id);
-    if (lit) return { color: lit, thickness: 2.5, opacity: 0.9 * faded };
-    if (to?.kind === "subissue") return { color: nodeColor(to), thickness: 1.5, opacity: 0.55 };
-    const touched = to?.tile && to.tile.touch !== "none";
-    if (!touched || !to) return { color: colors.border, thickness: 1, opacity: 0.9 * faded };
-    const color = to.tile?.onMap ? nodeColor(to) : colors.statusWarning;
-    return { color, thickness: 1.2, opacity: 0.6 * faded };
+    if (lit) return { color: lit, thickness: 2.5, opacity: 0.9 };
+    const faded = dimmed(a) || dimmed(b) ? 0.3 : 1;
+    if (edge.kind === "owns") {
+      const file = a?.kind === "file" ? a : b?.kind === "file" ? b : undefined;
+      const sub = a?.kind === "subissue" ? a : b;
+      if (file) return { color: nodeColor(file), thickness: 1, opacity: 0.28 * faded };
+      return { color: sub ? nodeColor(sub) : colors.border, thickness: 1.5, opacity: 0.55 };
+    }
+    const shared = a?.owner && a.owner === b?.owner ? nodeColor(a) : colors.foregroundMuted;
+    if (edge.kind === "import") return { color: shared, thickness: 1.2, opacity: 0.55 * faded };
+    if (edge.kind === "link") return { color: shared, thickness: 1, opacity: 0.4 * faded };
+    return { color: colors.foregroundMuted, thickness: 0.8, opacity: 0.25 * faded };
   };
-  const labels = useMemo(() => {
-    const children = new Map(issue.children.map((child) => [child.identifier.toUpperCase(), child]));
-    const linesOf = (node: GraphNode): readonly [string, string | null] => {
-      if (node.kind === "issue") return [node.label, clip(issue.title, 34)];
-      if (node.kind === "file") return [node.label, null];
-      const todos = progress.groups.get(node.label) ?? [];
-      const done = todos.filter((todo) => todoStatus(todo) === "completed").length;
-      const counts = todos.length > 0 ? `  ${done}/${todos.length}` : "";
-      const folded = node.folded > 0 ? `  +${node.folded}` : "";
-      return [`${node.label}${counts}${folded}`, clip(children.get(node.label)?.title ?? "", 26)];
-    };
-    const order = (node: GraphNode) =>
-      node.id === selected ? 0 : node.kind === "issue" ? 1 : node.kind === "subissue" ? 2 : working.has(node.id) ? 3 : 5;
-    const wanted = graph.nodes.filter(
-      (node) =>
-        node.kind !== "file" || node.id === selected || working.has(node.id) || (node.tile !== null && node.tile.touch !== "none"),
-    );
-    const lines = new Map<string, readonly [string, string | null]>();
-    const requests: LabelRequest[] = [];
-    for (const node of [...wanted].sort((a, b) => order(a) - order(b))) {
-      const at = positions.get(node.id);
-      if (!at) continue;
-      const text = linesOf(node);
-      const wide = Math.max(text[0].length * (node.kind === "issue" ? 7.4 : 6.2), (text[1]?.length ?? 0) * 5.6);
-      const box = { width: Math.min(170, wide + 4), height: text[1] ? 28 : 14 };
-      lines.set(node.id, text);
-      const spotsFor = (w: number, h: number) =>
-        labelSides(at.side).map((side) => labelBox({ ...at, side }, nodeSize(node) / 2, w, h));
-      const short = text[1] ? Math.min(170, text[0].length * (node.kind === "issue" ? 7.4 : 6.2) + 4) : 0;
-      requests.push({
-        id: node.id,
-        ...box,
-        spots: spotsFor(box.width, box.height),
-        fallback: text[1] ? { width: short, height: 14, spots: spotsFor(short, 14) } : undefined,
-      });
-    }
-    const shapes: { at: Point; radius: number }[] = graph.nodes.flatMap((node) => {
-      const at = positions.get(node.id);
-      return at ? [{ at, radius: nodeSize(node) / 2 }] : [];
-    });
-    // Keep labels out from under the agents hovering over their nodes.
-    for (const target of new Set(targets.map((entry) => entry.target))) {
-      const at = positions.get(target);
-      const node = byId.get(target);
-      if (at && node) shapes.push({ at: { x: at.x, y: at.y - nodeSize(node) / 2 - HOVER_GAP }, radius: 16 });
-    }
-    const shown = new Map<string, Label>();
-    const widths = new Map(requests.map((request) => [request.id, request.width]));
-    const fallbacks = new Map(requests.map((request) => [request.id, request.fallback?.width ?? 0]));
-    for (const [id, box] of placeLabels(requests, width, height, shapes)) {
-      const text = lines.get(id) ?? ["", null];
-      shown.set(id, {
-        left: box.left,
-        top: box.top,
-        width: (box.short ? fallbacks.get(id) : widths.get(id)) ?? 0,
-        lines: box.short ? [text[0], null] : text,
-      });
-    }
-    return shown;
-  }, [graph.nodes, positions, selected, working, targets, byId, width, height, issue, progress]);
   // Agents on the same node hover side by side.
   const hovers = useMemo(() => {
     const seen = new Map<string, number>();
@@ -383,6 +306,20 @@ export function LiveGraph(props: GraphViewProps) {
       }),
     );
   }, [targets, positions, byId]);
+  const cursors = useMemo(
+    () =>
+      targets.flatMap(({ agent, target }) => {
+        const at = hovers.get(agent.id)?.(target);
+        if (!at) return [];
+        const text = agent.caption ?? (agent.kind === "child" ? agent.label : null);
+        return [{ at, caption: captionWidth(text), flip: at.x > width - CAPTION_ROOM }];
+      }),
+    [targets, hovers, width],
+  );
+  const labels = useMemo(
+    () => graphLabels({ graph, positions, issue, progress, selected, working, cursors, width, height }),
+    [graph.nodes, positions, issue, progress, selected, working, cursors, width, height],
+  );
   const press = useCallback(
     (id: string) => {
       setSelected((current) => (current === id ? null : id));
@@ -395,6 +332,9 @@ export function LiveGraph(props: GraphViewProps) {
     () =>
       ({
         canvas: { height, width: "100%", overflow: "hidden" },
+        waiting: { ...StyleSheet.absoluteFillObject, alignItems: "center", justifyContent: "center" },
+        waitingText: { color: colors.foregroundMuted, fontSize: 12 },
+        folder: { position: "absolute", color: colors.foregroundMuted, fontFamily: MONO, fontSize: 10, opacity: 0.75 },
         caption: {
           minHeight: 32,
           marginTop: 8,
@@ -413,7 +353,12 @@ export function LiveGraph(props: GraphViewProps) {
   return (
     <View>
       <View style={styles.canvas} onLayout={measure}>
-        {width > 0
+        {!ready ? (
+          <View style={styles.waiting}>
+            <Text style={styles.waitingText}>Linking files…</Text>
+          </View>
+        ) : null}
+        {shown
           ? ordered.map((edge) => {
               const from = positions.get(edge.from);
               const to = positions.get(edge.to);
@@ -421,7 +366,19 @@ export function LiveGraph(props: GraphViewProps) {
               return <EdgeLine key={edge.id} from={from} to={to} style={edgeStyle(edge)} />;
             })
           : null}
-        {width > 0
+        {shown
+          ? labels.folders.map((folder) => (
+              <Text
+                key={folder.folder}
+                pointerEvents="none"
+                numberOfLines={1}
+                style={[styles.folder, { left: folder.left, top: folder.top, width: folder.width }]}
+              >
+                {folder.folder === "." ? "/" : `${folder.folder}/`}
+              </Text>
+            ))
+          : null}
+        {shown
           ? graph.nodes.map((node) => {
               const at = positions.get(node.id);
               if (!at) return null;
@@ -436,14 +393,14 @@ export function LiveGraph(props: GraphViewProps) {
                   dim={dimmed(node)}
                   selected={selected === node.id}
                   current={working.has(node.id)}
-                  label={labels.get(node.id) ?? null}
+                  label={labels.nodes.get(node.id) ?? null}
                   reduce={props.reduceMotion}
                   onPress={press}
                 />
               );
             })
           : null}
-        {width > 0
+        {shown
           ? targets.map(({ agent, target }) => {
               const hover = hovers.get(agent.id);
               if (!hover) return null;
@@ -466,7 +423,7 @@ export function LiveGraph(props: GraphViewProps) {
       <View style={styles.caption}>
         {selectedNode ? (
           <Text numberOfLines={2} style={styles.captionText}>
-            {caption(selectedNode, issue)}
+            {caption(selectedNode, issue, graph)}
           </Text>
         ) : (
           <Text style={styles.hint}>Select a node to see its file or issue.</Text>
