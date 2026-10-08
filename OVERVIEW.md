@@ -39,9 +39,13 @@ In **Settings → Plugins → Linear → Icon**, choose an SVG file or paste SVG
 
 Turn on **Update Linear from agent todos** in the Live settings. After each turn, a todo that starts with a sub-issue key, such as `ENG-124: add the queue`, moves that sub-issue to In Progress, and then to Done when all its todos are done. The parent moves to In Review when every sub-issue is done, never to Done. Statuses only move forward.
 
+## Project knowledge
+
+The daemon keeps a map of each project's files without an agent: its folders, services, packages, languages, commands, and guide files. Explore and setup agents start from it. Ticket-text maps use it to match short paths to real files and to put a named service on the map. When an agent works off the map, Linear Live shows the service or folder it is in. See it, or inspect again, under **Project knowledge** in **Projects**.
+
 ## Set up project prompts
 
-In **Projects**, select **Start** under **Set up with an agent**. An agent reads the repository's guidelines, scripts, and CI files and proposes project instructions, steps, and prompt additions. You accept each change before it is saved.
+In **Projects**, select **Start** under **Set up with an agent**. An agent reads the repository's guidelines, scripts, and CI files and proposes project instructions, steps, and prompt additions. You accept each change before it is saved. **Open agent** shows the agent while it works, and the lines it writes about the project and its areas go into the project knowledge.
 
 ## Choose projects
 
@@ -53,4 +57,4 @@ Choose **Attach Linear issue** in the composer attachment menu. The agent gets t
 
 ## Data and permissions
 
-Only the daemon sends requests to `https://api.linear.app/graphql`. The daemon never sends a key back to the app. Paseo sends the prompt, with the issue snapshot, to the agent provider. Explore and setup agents read project files and send them to your agent provider. The daemon saves explore maps, and agents that wait for a map, beside the key file, and Linear Live lists and reads files only inside the agent's folder. For Claude agents, the daemon also reads the subagent transcripts Claude saves for the session, to show what each subagent does. With agent guidance on, it writes Claude Code hooks with the issue keys and titles beside the key file, and it serves the Linear tools on 127.0.0.1 with a token for each agent. Each token reaches only its issue and that issue's sub-issues. With todo sync on, the daemon changes issue statuses in Linear. The daemon keeps recent Linear responses in memory for up to 24 hours, and the list shows them with **Showing saved results. Updating…** while it gets new data.
+Only the daemon sends requests to `https://api.linear.app/graphql`. The daemon never sends a key back to the app. Paseo sends the prompt, with the issue snapshot, to the agent provider. Explore and setup agents read project files and send them to your agent provider. The daemon saves explore maps, project knowledge, and agents that wait for a map, beside the key file, and Linear Live lists and reads files only inside the agent's folder. For Claude agents, the daemon also reads the subagent transcripts Claude saves for the session, to show what each subagent does. With agent guidance on, it writes Claude Code hooks with the issue keys and titles beside the key file, and it serves the Linear tools on 127.0.0.1 with a token for each agent. Each token reaches only its issue and that issue's sub-issues. With todo sync on, the daemon changes issue statuses in Linear. The daemon keeps recent Linear responses in memory for up to 24 hours, and the list shows them with **Showing saved results. Updating…** while it gets new data.

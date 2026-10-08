@@ -3,6 +3,7 @@ import type { ProjectConfig } from "./settings";
 
 // A setup proposal shows only fields that change; accepted fields append to the prompts.
 export type ProposalField = "instructions" | "steps" | "implement" | "review";
+type PromptProposal = Pick<InitProposal, ProposalField>;
 
 export interface FieldDiff {
   field: ProposalField;
@@ -11,7 +12,7 @@ export interface FieldDiff {
   proposed: string;
 }
 
-export function proposalDiffs(config: ProjectConfig, proposal: InitProposal): FieldDiff[] {
+export function proposalDiffs(config: ProjectConfig, proposal: PromptProposal): FieldDiff[] {
   const steps = proposal.steps.map((step) => step.trim()).filter(Boolean);
   const rows: FieldDiff[] = [
     {
@@ -43,7 +44,7 @@ export function proposalDiffs(config: ProjectConfig, proposal: InitProposal): Fi
 }
 
 export function applyProposal(
-  proposal: InitProposal,
+  proposal: PromptProposal,
   fields: ReadonlySet<ProposalField>,
 ): Partial<ProjectConfig> {
   const patch: Partial<ProjectConfig> = {};

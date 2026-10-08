@@ -23,7 +23,7 @@ import {
   useMapModel,
   useReduceMotion,
 } from "./live-timeline";
-import { hitRateLine } from "../shared/map-model";
+import { hitRateLine, offMapLine, offMapWhere } from "../shared/map-model";
 import { useIssue } from "./queries";
 import { Button, EmptyState, errorMessage, IconButton, type Theme } from "./ui";
 
@@ -219,7 +219,10 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     provider: agent.provider,
     activity,
   });
-  const model = useMapModel(agentId, liveMap.map.files, agents.files, agents.dirs);
+  const model = useMapModel(agentId, liveMap.map.files, agents.files, agents.dirs, liveMap.areas);
+  const offMap = offMapLine(model);
+  const currentPath = activity.current?.path ?? null;
+  const where = useMemo(() => offMapWhere(model, currentPath, liveMap.areas), [model, currentPath, liveMap.areas]);
   // Hold the map until its first full data, so it does not draw once and then swap.
   const mapShown = useRef(false);
   if (liveMap.ready && model.ready) mapShown.current = true;
@@ -300,6 +303,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
         main: { flex: 1, minWidth: 0 },
         mainContent: { gap: 16, paddingBottom: 32 },
         hit: { color: colors.foregroundMuted, fontSize: 12 },
+        off: { color: colors.statusWarning, fontSize: 12 },
         tools: { flexDirection: "row", alignItems: "center", gap: 12 },
         mapHead: { gap: 8 },
         mapWait: { minHeight: 240, alignItems: "center", justifyContent: "center" },
@@ -316,6 +320,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
       status={agent.status}
       provider={agent.provider}
       current={activity.current}
+      offMap={where}
       reduceMotion={reduceMotion}
     />
   );
@@ -351,6 +356,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
       ) : (
       <View style={styles.mapHead}>
         <Text style={styles.hit}>{hitRateLine(model)}</Text>
+        {offMap ? <Text style={styles.off}>{offMap}</Text> : null}
         {graph ? (
           <LiveGraph
             theme={theme}
@@ -362,6 +368,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
             progress={progress}
             owners={owners}
             agents={cursors}
+            areas={liveMap.areas}
             focus={focus}
             onFocus={toggleFocus}
             camera={props.graphCamera}

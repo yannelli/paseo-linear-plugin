@@ -3,6 +3,7 @@ import { Animated, type LayoutChangeEvent, Pressable, StyleSheet, Text, View } f
 import { focusBox, project, unproject } from "../shared/graph-camera";
 import type { Placed, Point } from "../shared/graph-geometry";
 import { focusNode, type Graph, type GraphEdge, type GraphNode, graphKey, layoutGraph } from "../shared/graph-model";
+import { type AreaRef, whereLabel } from "../shared/knowledge";
 import type { IssueDetail, WorkflowState } from "../shared/linear";
 import type { GraphCamera } from "../shared/settings";
 import { CameraButtons, useGraphCamera } from "./graph-camera";
@@ -29,6 +30,8 @@ export interface GraphViewProps {
   progress: IssueProgress;
   owners: OwnerColors;
   agents: readonly CursorAgent[];
+  /** Areas of the project, to say where an off-map file is. */
+  areas: readonly AreaRef[];
   focus: string | null;
   onFocus(key: string): void;
   /** Saved camera mode: follow the running agents, or show the whole graph. */
@@ -223,7 +226,7 @@ const GraphNodeView = memo(function GraphNodeView(props: NodeProps) {
   );
 }, sameNode);
 
-function caption(node: GraphNode, issue: IssueDetail, graph: Graph): string {
+function caption(node: GraphNode, issue: IssueDetail, graph: Graph, areas: readonly AreaRef[]): string {
   if (node.kind === "issue") return `${issue.identifier} · ${issue.title}`;
   if (node.kind === "subissue") {
     const child = issue.children.find((entry) => entry.identifier.toUpperCase() === node.label);
@@ -231,7 +234,7 @@ function caption(node: GraphNode, issue: IssueDetail, graph: Graph): string {
     return `${node.label} · ${child?.state.name ?? ""} · ${child?.title ?? ""}${folded}`;
   }
   const tile = node.tile;
-  const where = tile?.onMap ? `on the map for ${node.owner}` : "not on the map";
+  const where = tile?.onMap ? `on the map for ${node.owner}` : `not on the map, in ${whereLabel(node.path ?? "", areas)}`;
   const touch = !tile || tile.touch === "none" ? "not touched yet" : tile.touch;
   const lines = tile && (tile.added > 0 || tile.removed > 0) ? ` · +${tile.added} -${tile.removed}` : "";
   const linked = graph.edges.filter((edge) => edge.kind !== "owns" && (edge.from === node.id || edge.to === node.id)).length;
@@ -507,7 +510,7 @@ export function LiveGraph(props: GraphViewProps) {
       <View style={styles.caption}>
         {selectedNode ? (
           <Text numberOfLines={2} style={styles.captionText}>
-            {caption(selectedNode, issue, graph)}
+            {caption(selectedNode, issue, graph, props.areas)}
           </Text>
         ) : (
           <Text style={styles.hint}>Select a node to see its file or issue.</Text>

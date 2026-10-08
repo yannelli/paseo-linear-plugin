@@ -6,7 +6,7 @@ import {
   SettingsSection,
   SettingsSwitch,
 } from "@getpaseo/plugin/client/ui";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { initStartRpc, initStatusRpc } from "../shared/live";
@@ -17,6 +17,7 @@ import {
   proposalDiffs,
 } from "../shared/project-setup";
 import type { ProjectConfig } from "../shared/settings";
+import { knowledgeKey } from "./project-knowledge";
 import { Button, errorMessage, type Theme } from "./ui";
 
 // Setup runs on the daemon. Remember the job per project so leaving the screen keeps it.
@@ -26,8 +27,10 @@ export function ProjectSetup(props: {
   theme: Theme;
   config: ProjectConfig;
   change(patch: Partial<ProjectConfig>): void;
+  /** Opens the setup agent while it runs; absent on hosts without navigation. */
+  openAgent?: (agentId: string) => void;
 }) {
-  const { theme, config, change } = props;
+  const { theme, config, change, openAgent } = props;
   const start = useRpc(initStartRpc);
   const status = useRpc(initStatusRpc);
   const [jobId, setJobId] = useState(() => jobsByProject.get(config.projectId) ?? null);
@@ -47,6 +50,12 @@ export function ProjectSetup(props: {
   });
   const state = job.data?.job ?? null;
   const proposal = job.data?.proposal ?? null;
+  // The daemon saved the agent's area summaries; show them in Project knowledge.
+  const queries = useQueryClient();
+  const finished = state?.status === "done";
+  useEffect(() => {
+    if (finished) void queries.invalidateQueries({ queryKey: knowledgeKey(config.projectId) });
+  }, [finished, queries, config.projectId]);
   const diffs = useMemo(
     () => (proposal ? proposalDiffs(config, proposal) : []),
     [config, proposal],
@@ -76,12 +85,27 @@ export function ProjectSetup(props: {
       <SettingsCard>
         <SettingsAction
           label="Read this repository's guidelines"
-          hint="An agent reads AGENTS.md, CONTRIBUTING, scripts, and CI, then proposes instructions and steps. It is told not to edit. You review each change before it is used."
+          hint="The daemon inspects the project first, and the agent starts from that project map. The agent reads AGENTS.md, CONTRIBUTING, scripts, and CI, then proposes instructions and steps, and describes each area for Project knowledge. It is told not to edit. You review each prompt change before it is used."
           actionLabel={running ? "Reading…" : proposal ? "Run again" : "Start"}
           disabled={running || !config.rootPath}
           onPress={() => begin.mutate()}
         />
-        {running ? <SettingsRow label="The setup agent is reading the repository." /> : null}
+        {running ? (
+          <SettingsRow
+            label={state?.agentId ? "The setup agent is reading the repository." : "Inspecting the project…"}
+          >
+            {state?.agentId && openAgent ? (
+              <View style={ACTIONS_STYLE}>
+                <Button
+                  theme={theme}
+                  icon="Bot"
+                  label="Open agent"
+                  onPress={() => openAgent(state.agentId ?? "")}
+                />
+              </View>
+            ) : null}
+          </SettingsRow>
+        ) : null}
         {failure ? <SettingsRow label="Setup did not finish" error={failure} /> : null}
         {state?.status === "done" && diffs.length === 0 ? (
           <SettingsAction

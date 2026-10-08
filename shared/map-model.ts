@@ -1,4 +1,5 @@
 import type { DirTouch, FileTouch } from "./activity";
+import { type AreaRef, areaLabel, areaOf, whereLabel } from "./knowledge";
 import { dirOf, type MapFile } from "./live";
 
 // The Linear Live map: predicted files and touched files grouped into folder zones, and the
@@ -31,12 +32,21 @@ export interface MapZone {
   /** Touched files that are on the map. */
   hits: number;
   explored: ZoneExplored;
+  /** The service, package, or main folder the zone is in, from the project knowledge. */
+  area: AreaRef | null;
+}
+
+/** Touched files the map did not predict, grouped by where they are. */
+export interface OffMapGroup {
+  where: string;
+  files: number;
 }
 
 export interface MapModel {
   zones: MapZone[];
   touched: number;
   hits: number;
+  offMap: OffMapGroup[];
 }
 
 // Search hits alone do not count: one broad search would flood the map with off-map tiles.
@@ -98,6 +108,7 @@ export function buildMapModel(
   touches: readonly FileTouch[],
   listing: ReadonlyMap<string, readonly string[]>,
   dirs: readonly DirTouch[] = [],
+  areas: readonly AreaRef[] = [],
 ): MapModel {
   const predicted = predictions(files);
   const touched = new Map(touches.filter(isTouched).map((file) => [file.path, file]));
@@ -134,17 +145,54 @@ export function buildMapModel(
       touched: tiles.filter((tile) => tile.touch !== "none").length,
       hits: tiles.filter((tile) => tile.touch !== "none" && tile.onMap).length,
       explored: exploredState(dir, dirs),
+      area: areaOf(dir, areas),
     };
   });
   let hits = 0;
-  for (const path of touched.keys()) if (ownerOf(path, predicted)) hits += 1;
-  return { zones, touched: touched.size, hits };
+  const off = new Map<string, number>();
+  for (const path of touched.keys()) {
+    if (ownerOf(path, predicted)) hits += 1;
+    else off.set(whereLabel(path, areas), (off.get(whereLabel(path, areas)) ?? 0) + 1);
+  }
+  const offMap = [...off]
+    .map(([where, count]) => ({ where, files: count }))
+    .sort((a, b) => b.files - a.files || a.where.localeCompare(b.where));
+  return { zones, touched: touched.size, hits, offMap };
 }
 
 export function hitRateLine(model: MapModel): string {
   if (model.touched === 0) return "No files touched yet";
   const noun = model.touched === 1 ? "file" : "files";
   return `${model.touched} ${noun} touched, ${model.hits} on the map`;
+}
+
+const OFF_MAP_SHOWN = 4;
+
+/** Such as "Off the map: billing-api · service (3), docs (1)"; null when all are on it. */
+export function offMapLine(model: MapModel): string | null {
+  if (model.offMap.length === 0) return null;
+  const shown = model.offMap.slice(0, OFF_MAP_SHOWN).map((group) => `${group.where} (${group.files})`);
+  const more = model.offMap.length - OFF_MAP_SHOWN;
+  return `Off the map: ${shown.join(", ")}${more > 0 ? `, ${more} more` : ""}`;
+}
+
+/** Where the file is when the agent touched it off the map; null on the map or untouched. */
+export function offMapWhere(model: MapModel, path: string | null, areas: readonly AreaRef[]): string | null {
+  if (!path) return null;
+  for (const zone of model.zones) {
+    const tile = zone.tiles.find((entry) => entry.path === path && !entry.ghost);
+    if (tile) return tile.touch !== "none" && !tile.onMap ? whereLabel(path, areas) : null;
+  }
+  return null;
+}
+
+/** The area a zone header names; only the part its folder name does not already say. */
+export function zoneAreaLabel(zone: MapZone): string | null {
+  const area = zone.area;
+  if (!area || area.path === "") return null;
+  const folder = area.path.replace(/\/$/, "").split("/").pop();
+  if (zone.dir !== area.path || area.name !== folder) return areaLabel(area);
+  return area.role || (area.kind === "folder" ? null : area.kind);
 }
 
 export const ZONE_GAP = 10;

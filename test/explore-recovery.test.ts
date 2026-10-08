@@ -12,6 +12,7 @@ import {
 } from "../server/agent-runs";
 import type { LinearAccess } from "../server/handlers";
 import { registerLive } from "../server/live";
+import { createKnowledge } from "../server/knowledge";
 import { createLaunchQueue, createMapStore, PENDING_LAUNCH_MAX_AGE_MS } from "../server/stores";
 import type { IssueDetail } from "../shared/linear";
 import type { LaunchInput } from "../shared/live";
@@ -175,6 +176,7 @@ async function harness(agents: { id: string; cwd: string; archivedAt: string | n
     access: access as unknown as LinearAccess,
     maps,
     launches,
+    knowledge: createKnowledge(path.join(directory, "knowledge")),
     readSettings: async () => null,
   });
   const orphan = fakeAgent("explore-1", '```json\n{"files":[{"path":"src/q.ts","issue":"ENG-2"}]}\n```');
