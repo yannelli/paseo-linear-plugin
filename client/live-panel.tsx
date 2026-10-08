@@ -249,8 +249,16 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     [view, graphInput, links.links],
   );
   const cursors = useMemo(
-    () => cursorAgents({ theme, provider: agent.provider, working, activity, children: agents.children }),
-    [theme, agent.provider, working, activity, agents.children],
+    () =>
+      cursorAgents({
+        theme,
+        provider: agent.provider,
+        working,
+        activity,
+        children: agents.children,
+        subagents: agents.subagents,
+      }),
+    [theme, agent.provider, working, activity, agents.children, agents.subagents],
   );
   const owners = useMemo(() => ownerColors(issue, colors.accent), [issue, colors.accent]);
   const progress = useMemo(() => issueProgress(issue, activity.todos), [issue, activity.todos]);
@@ -367,14 +375,14 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
     <Card theme={theme} title="Activity">
       <ActivityFeed
         theme={theme}
-        events={activity.events}
+        events={agents.events}
         loading={timeline.loading}
         error={timeline.error}
         reduceMotion={reduceMotion}
       />
     </Card>
   );
-  const helpers = agents.children.length + activity.subagents.length;
+  const helpers = agents.children.length + agents.subagents.length;
   const agentsCard =
     helpers > 0 ? (
       <Card theme={theme} title="Agents" meta={<Text style={styles.hit}>{`${helpers + 1}`}</Text>}>
@@ -384,7 +392,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
           status={agent.status}
           current={activity.current}
           childAgents={agents.children}
-          subagents={activity.subagents}
+          subagents={agents.subagents}
           onOpenAgent={props.openAgent}
         />
       </Card>

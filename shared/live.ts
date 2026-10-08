@@ -42,6 +42,8 @@ export const InitProposalSchema = z.object({
 });
 export type InitProposal = z.infer<typeof InitProposalSchema>;
 
+/** Files an explore run may list; the map and the graph show this many and more. */
+export const MAX_EXPLORE_FILES = 150;
 export const MAX_LIST_DIRS = 40;
 export const MAX_DIR_ENTRIES = 60;
 
@@ -62,6 +64,34 @@ export const linksRpc = defineRpc({
   output: z.object({
     links: z.array(z.object({ from: z.string(), to: z.string(), kind: z.enum(["import", "link", "mention"]) })),
   }),
+});
+
+const SubagentLogSchema = z.object({
+  id: z.string(),
+  type: z.string(),
+  description: z.string(),
+  /** The parent's call that started it, when Claude recorded one. */
+  toolUseId: z.string().nullable(),
+  updatedAt: z.number(),
+  /** Its last reply ended the run. */
+  finished: z.boolean(),
+  items: z.array(
+    z.object({
+      type: z.literal("tool_call"),
+      callId: z.string(),
+      name: z.string(),
+      status: z.enum(["running", "completed", "failed"]),
+      detail: z.record(z.string(), z.unknown()),
+    }),
+  ),
+});
+export type SubagentLog = z.infer<typeof SubagentLogSchema>;
+
+/** Tool calls of the subagents an agent started inside its provider. */
+export const subagentLogsRpc = defineRpc({
+  name: "linear.live.subagents",
+  input: z.object({ agentId: z.string().min(1) }),
+  output: z.object({ runs: z.array(SubagentLogSchema) }),
 });
 
 export const liveMapRpc = defineRpc({

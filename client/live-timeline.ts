@@ -12,6 +12,8 @@ import {
   listFilesRpc,
   linksRpc,
   liveMapRpc,
+  type SubagentLog,
+  subagentLogsRpc,
   MAX_LINK_FILES,
   MAX_LIST_DIRS,
   type MapFile,
@@ -338,4 +340,24 @@ export function useFileLinks(
     // With no files or a failed read the graph shows without links rather than waiting.
     ready: sorted.length === 0 || query.data !== undefined || query.isError,
   };
+}
+
+const NO_RUNS: readonly SubagentLog[] = [];
+
+/** Tool calls of the agent's subagents, read again every few seconds while the agent works. */
+export function useSubagentLogs(
+  agentId: string,
+  enabled: boolean,
+  polling: boolean,
+): { runs: readonly SubagentLog[]; checkedAt: number } {
+  const read = useRpc(subagentLogsRpc);
+  const query = useQuery({
+    queryKey: ["linear", "live", "subagents", agentId],
+    queryFn: () => read({ agentId }),
+    enabled,
+    refetchInterval: polling ? 3_000 : false,
+    placeholderData: keepPreviousData,
+    staleTime: 2_000,
+  });
+  return { runs: query.data?.runs ?? NO_RUNS, checkedAt: query.dataUpdatedAt };
 }

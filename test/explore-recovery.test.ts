@@ -8,6 +8,7 @@ import {
   readOnlyAnswer,
   readOnlyCommand,
   waitUntilIdle,
+  withEffort,
 } from "../server/agent-runs";
 import type { LinearAccess } from "../server/handlers";
 import { registerLive } from "../server/live";
@@ -261,5 +262,17 @@ describe("waiting when the finish result has no snapshot", () => {
 
   it("denies a path passed after an equals sign", () => {
     expect(readOnlyCommand("rg --file=/etc/passwd x", CWD)).toBe(false);
+  });
+});
+
+describe("explore effort", () => {
+  it("applies the effort only to the chosen model", () => {
+    expect(withEffort({ provider: "claude/claude-haiku-5-5" }, "claude/claude-haiku-5-5", "low")).toEqual({
+      provider: "claude/claude-haiku-5-5",
+      thinkingOptionId: "low",
+    });
+    expect(withEffort({ provider: "codex" }, "claude/claude-haiku-5-5", "low")).toEqual({ provider: "codex" });
+    expect(withEffort({ provider: "claude" }, "claude", "low")).toEqual({ provider: "claude" });
+    expect(withEffort({ provider: "claude/x" }, "claude/x", "")).toEqual({ provider: "claude/x" });
   });
 });

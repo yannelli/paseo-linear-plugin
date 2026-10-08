@@ -87,6 +87,10 @@ function lineCount(value: string | null): number {
 }
 
 function diffCounts(detail: Record<string, unknown>): { added: number; removed: number } {
+  // Subagent transcripts send counts, not the text.
+  if (typeof detail.added === "number") {
+    return { added: detail.added, removed: typeof detail.removed === "number" ? detail.removed : 0 };
+  }
   const diff = text(detail.unifiedDiff);
   if (diff) {
     let added = 0;
@@ -228,7 +232,7 @@ export function deriveActivity(items: readonly TimelineItemLike[], cwd: string):
       if (path) touch(path, "read", order).reads += 1;
     } else if ((detail.type === "edit" || detail.type === "write") && raw) {
       const write = detail.type === "write";
-      const counts = write
+      const counts = write && typeof detail.added !== "number"
         ? { added: lineCount(text(detail.content)), removed: 0 }
         : diffCounts(detail);
       event.kind = write ? "write" : "edit";

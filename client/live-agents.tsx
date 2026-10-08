@@ -12,9 +12,10 @@ import {
   deriveActivity,
   type FileTouch,
 } from "../shared/activity";
+import type { SubagentLog } from "../shared/live";
 import type { SubagentRun } from "../shared/subagents";
 import { MONO } from "./live-issues";
-import { useAgentTimelines } from "./live-timeline";
+import { useAgentTimelines, useSubagentLogs } from "./live-timeline";
 import { ProviderIcon } from "./provider-icon";
 import { type Theme, usePressableStyle } from "./ui";
 
@@ -25,6 +26,9 @@ const CHILD_LABEL = "paseo.parent-agent-id";
 const MAX_CHILDREN = 4;
 const CHILD_COLORS = ["#e879f9", "#38bdf8", "#facc15", "#fb7185"];
 const POLL_MS = 10_000;
+const SUBAGENT_COLORS = ["#a78bfa", "#34d399", "#f97316", "#22d3ee", "#f472b6", "#a3e635", "#fbbf24", "#60a5fa"];
+// A transcript that has not grown for this long belongs to a subagent that stopped.
+const SUBAGENT_IDLE_MS = 3 * 60_000;
 
 export type AgentStatus = PluginAgentSnapshot["status"];
 
@@ -42,6 +46,31 @@ export interface ChildView {
   activity: Activity | null;
   /** Works in the parent's folder, so its files can go on the same map. */
   sameFolder: boolean;
+  /** A provider subagent read from its transcript, which Paseo cannot open as an agent. */
+  subagent?: boolean;
+}
+
+const runKey = (log: SubagentLog) => `${log.type}\u0000${log.description}`;
+const runTitle = (type: string, description: string) => (description ? `${type}: ${description}` : type);
+
+/** Subagents with a transcript, as views like child agents in the parent's folder. */
+export function subagentViews(logs: readonly SubagentLog[], cwd: string, checkedAt: number): ChildView[] {
+  return logs.map((log, index) => {
+    const running = !log.finished && checkedAt - log.updatedAt < SUBAGENT_IDLE_MS;
+    return {
+      agent: {
+        id: `sub:${log.id}`,
+        title: runTitle(log.type, log.description),
+        provider: "claude",
+        status: running ? "running" : "idle",
+        cwd,
+        color: SUBAGENT_COLORS[index % SUBAGENT_COLORS.length] ?? "#a78bfa",
+      },
+      activity: deriveActivity(log.items, cwd),
+      sameFolder: true,
+      subagent: true,
+    };
+  });
 }
 
 export interface AgentMarker {
@@ -250,7 +279,7 @@ export function AgentsList(props: {
         detail={props.current?.text ?? null}
         live={parentRunning}
       />
-      {props.childAgents.map(({ agent, activity, sameFolder: shared }) => (
+      {props.childAgents.map(({ agent, activity, sameFolder: shared, subagent: subagentView }) => (
         <AgentRow
           key={agent.id}
           theme={theme}
@@ -258,10 +287,10 @@ export function AgentsList(props: {
           icon="provider"
           provider={agent.provider}
           title={agent.title}
-          status={STATUS_COPY[agent.status] ?? agent.status}
+          status={subagentView && agent.status !== "running" ? "Done" : (STATUS_COPY[agent.status] ?? agent.status)}
           detail={shared ? (activity?.current?.text ?? null) : `In ${agent.cwd.split("/").pop() ?? agent.cwd}`}
           live={agent.status === "running"}
-          onPress={onOpenAgent ? open(agent.id) : undefined}
+          onPress={onOpenAgent && !subagentView ? open(agent.id) : undefined}
         />
       ))}
       {props.subagents.map((run) => (
@@ -315,9 +344,15 @@ export function useLiveAgents(input: {
   const children = useChildAgents(agentId, status === "running");
   const ids = useMemo(() => children.map((child) => child.id), [children]);
   const timelines = useAgentTimelines(ids);
+  const logs = useSubagentLogs(
+    agentId,
+    provider.split("/")[0] === "claude" && activity.subagents.length > 0,
+    status === "running",
+  );
+  const subViews = useMemo(() => subagentViews(logs.runs, cwd, logs.checkedAt), [logs, cwd]);
   const views = useMemo(
-    () =>
-      children.map((agent): ChildView => {
+    () => [
+      ...children.map((agent): ChildView => {
         const timeline = timelines.get(agent.id);
         return {
           agent,
@@ -325,8 +360,15 @@ export function useLiveAgents(input: {
           sameFolder: sameFolder(agent.cwd, cwd),
         };
       }),
-    [children, timelines, cwd],
+      ...subViews,
+    ],
+    [children, timelines, cwd, subViews],
   );
+  // Subagents with a transcript show as agents; the rest only report what they were asked.
+  const subagents = useMemo(() => {
+    const covered = new Set(logs.runs.map(runKey));
+    return activity.subagents.filter((run) => !covered.has(run.key));
+  }, [activity.subagents, logs.runs]);
   const markers = useMemo(
     () =>
       agentMarkers({
@@ -335,9 +377,9 @@ export function useLiveAgents(input: {
         working: status === "running",
         current: activity.current,
         children: views,
-        subagents: activity.subagents,
+        subagents,
       }),
-    [theme, provider, status, activity.current, activity.subagents, views],
+    [theme, provider, status, activity.current, subagents, views],
   );
   const files = useMemo(() => mergeTouches(activity.files, views), [activity.files, views]);
   const dirs = useMemo(
@@ -347,7 +389,15 @@ export function useLiveAgents(input: {
     ],
     [activity.dirs, views],
   );
-  return { children: views, markers, files, dirs };
+  // A subagent's row in the feed shows what it does now.
+  const events = useMemo(() => {
+    const doing = new Map(subViews.map((view) => [view.agent.title, view.activity?.current?.text ?? null]));
+    return activity.events.map((event) => {
+      const now = event.kind === "agent" ? doing.get(event.text) : undefined;
+      return now ? { ...event, detail: now } : event;
+    });
+  }, [activity.events, subViews]);
+  return { children: views, subagents, markers, files, dirs, events };
 }
 
 /** An agent that moves over the graph to what it works on. */
@@ -371,6 +421,8 @@ export function cursorAgents(input: {
   working: boolean;
   activity: Activity;
   children: readonly ChildView[];
+  /** Subagents with no cursor of their own, which circle the agent instead. */
+  subagents: readonly SubagentRun[];
 }): CursorAgent[] {
   const { activity } = input;
   const name = input.provider ? input.provider.charAt(0).toUpperCase() + input.provider.slice(1) : "Agent";
@@ -384,13 +436,15 @@ export function cursorAgents(input: {
       focus: activity.focus,
       running: input.working,
       caption: input.working ? (activity.current?.text ?? null) : null,
-      satellites: input.working ? activity.subagents.filter((run) => run.status === "running").length : 0,
+      satellites: input.working ? input.subagents.filter((run) => run.status === "running").length : 0,
     },
   ];
   for (const child of input.children) {
     // Paths are relative to each agent's folder, so only agents in this folder fit the graph.
     if (!child.sameFolder || !child.activity) continue;
     const running = child.agent.status === "running";
+    // Finished subagents can be many, so only working ones get a cursor.
+    if (child.subagent && !running) continue;
     agents.push({
       id: child.agent.id,
       kind: "child",
