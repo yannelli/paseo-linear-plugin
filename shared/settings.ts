@@ -57,6 +57,8 @@ export const linearSettings = defineSettings({
         enabled: z.boolean().default(true),
         mapping: z.enum(MAPPING_MODES).default("semantic"),
         exploreProvider: z.string().default(""),
+        /** Thinking option of the explore model; empty is the model's default. */
+        exploreEffort: z.string().default(""),
         syncTodos: z.boolean().default(false),
         view: z.enum(LIVE_VIEWS).default("map"),
         issuesCollapsed: z.boolean().default(false),

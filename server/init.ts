@@ -47,6 +47,7 @@ export function registerInit(server: PluginServerContext, dependencies: InitDepe
         workspace: await paseo.workspaces.open(rootPath),
         cwd: rootPath,
         provider: settings?.live.exploreProvider || settings?.launch.provider || "",
+        effort: settings?.live.exploreProvider ? settings.live.exploreEffort : "",
         title: `Set up Linear prompts for ${project.projectDisplayName}`,
         prompt: initPrompt(rootPath),
         labels: { [AGENT_LABELS.init]: projectId },

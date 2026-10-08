@@ -20,6 +20,8 @@ export interface InternalRun<T> {
   /** Folder the agent works in; its reads must stay inside. */
   cwd: string;
   provider: string;
+  /** Thinking option for the model in `provider`; ignored when another model runs. */
+  effort?: string;
   title: string;
   prompt: string;
   labels: Record<string, string>;
@@ -221,8 +223,14 @@ export interface StartedRun<T> {
   result: Promise<T>;
 }
 
+/** Adds the chosen effort only when the chosen model runs, not a fallback provider. */
+export function withEffort<C extends { provider: string }>(config: C, chosen: string, effort?: string) {
+  const applies = Boolean(effort) && chosen.includes("/") && config.provider === chosen;
+  return applies ? { ...config, thinkingOptionId: effort as string } : config;
+}
+
 export async function startInternalRun<T>(run: InternalRun<T>): Promise<StartedRun<T>> {
-  const config = await agentConfigFor(run.paseo, run.provider);
+  const config = withEffort(await agentConfigFor(run.paseo, run.provider), run.provider, run.effort);
   const handle = await run.workspace.agents.create({
     config,
     title: run.title,

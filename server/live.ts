@@ -13,8 +13,10 @@ import {
   launchAfterExploreRpc,
   linksRpc,
   listFilesRpc,
+  subagentLogsRpc,
   liveMapRpc,
   MAX_DIR_ENTRIES,
+  MAX_EXPLORE_FILES,
 } from "../shared/live";
 import { AGENT_LABELS, issueSnapshot } from "../shared/prompts";
 import { type LinearSettings, projectEnabled } from "../shared/settings";
@@ -27,6 +29,7 @@ import {
 } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
 import { fileLinks } from "./links";
+import { subagentLogs } from "./subagent-logs";
 import type { LaunchQueue, MapStore } from "./stores";
 
 const EXPLORE_TIMEOUT_MS = 20 * 60_000;
@@ -41,6 +44,8 @@ export interface AgentInfo {
   /** Paseo project of the agent's workspace, when the workspace is known. */
   projectId: string | null;
   provider: string;
+  /** The provider's session, such as Claude's session id. */
+  sessionId: string | null;
   labels: Record<string, string>;
 }
 
@@ -62,6 +67,7 @@ export async function agentInfo(paseo: Paseo, agentId: string): Promise<AgentInf
     workspaceId,
     projectId: workspace?.projectId ?? null,
     provider: agent.provider,
+    sessionId: agent.runtimeInfo?.sessionId ?? null,
     labels: agent.labels ?? {},
   };
 }
@@ -100,7 +106,7 @@ export function explorePrompt(issue: IssueDetail): string {
     issueSnapshot(issue, { includeComments: false }),
     "",
     "List the files an engineer will most likely read or change for this issue and each sub-issue.",
-    "Include files that will probably be created, at their expected path. List at most 40 files.",
+    `Include files that will probably be created, at their expected path. List at most ${MAX_EXPLORE_FILES} files.`,
     `Set "issue" to the sub-issue key the file belongs to, or ${issue.identifier} for the whole issue.`,
     `Valid keys: ${keys.join(", ")}.`,
     "Reply with only a JSON object in a ```json block, with repo-relative paths:",
@@ -223,6 +229,12 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
     return { links: await fileLinks(agent.cwd, files) };
   });
 
+  server.handle(subagentLogsRpc, async ({ agentId }, { paseo }) => {
+    const agent = await agentInfo(paseo, agentId);
+    // Only Claude keeps subagent transcripts this plugin can read.
+    if (agent.provider.split("/")[0] !== "claude" || !agent.sessionId) return { runs: [] };
+    return { runs: await subagentLogs(agent.sessionId, agent.cwd) };
+  });
   server.handle(liveMapRpc, async ({ identifier }, { paseo }) => {
     const map = await maps.get(identifier);
     let job = jobs.get(identifier)?.job ?? null;
@@ -249,6 +261,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
     /** Opened only when a new run starts. */
     workspace: () => Promise<WorkspaceHandle>;
     provider: string;
+    effort: string;
     force: boolean;
   }
 
@@ -275,6 +288,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
         workspace: await target.workspace(),
         cwd: target.cwd,
         provider: target.provider,
+        effort: target.effort,
         title: `Explore ${identifier}`,
         prompt: explorePrompt(issue),
         labels,
@@ -306,6 +320,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
       workspace: async () =>
         workspaceId ? paseo.workspaces.ref(workspaceId) : paseo.workspaces.open(cwd),
       provider: settings?.live.exploreProvider || agent.provider,
+      effort: settings?.live.exploreEffort ?? "",
       force,
     });
     return { job };
@@ -322,6 +337,7 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
       cwd: info.workspaceDirectory ?? info.projectRootPath,
       workspace: async () => workspace,
       provider: settings?.live.exploreProvider || input.agent.config.provider,
+      effort: settings?.live.exploreEffort ?? "",
       force: false,
     });
     // A failed or timed-out explore run still starts the agent; the map falls back to ticket text.

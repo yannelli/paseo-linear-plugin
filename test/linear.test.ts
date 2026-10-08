@@ -258,6 +258,7 @@ describe("agent prompts", () => {
         enabled: true,
         mapping: "semantic",
         exploreProvider: "",
+        exploreEffort: "",
         syncTodos: false,
         view: "map",
         issuesCollapsed: false,

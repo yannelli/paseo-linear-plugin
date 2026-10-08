@@ -26,6 +26,7 @@ const VIEW_OPTIONS: readonly { label: string; value: LiveView }[] = [
   { label: "Graph: issue, files, and agents as connected nodes", value: "graph" },
 ];
 const SAME_AGENT = "";
+const MODEL_DEFAULT = "";
 
 export function LiveSettings({ theme }: PluginSurfaceProps) {
   const settings = useSettings(linearSettings);
@@ -62,6 +63,20 @@ function LiveEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
     }
     return options;
   }, [providers.data, live.exploreProvider]);
+  // Efforts of the chosen model, such as Low to Max, with its default first.
+  const effortOptions = useMemo(() => {
+    const [agentId, ...rest] = live.exploreProvider.split("/");
+    const modelId = rest.join("/");
+    const model = providers.data
+      ?.find((agent) => agent.id === agentId)
+      ?.models.find((entry) => entry.id === modelId);
+    if (!model || model.efforts.length === 0) return null;
+    const fallback = model.efforts.find((effort) => effort.id === model.defaultEffortId);
+    return [
+      { label: fallback ? `Model default: ${fallback.label}` : "Model default", value: MODEL_DEFAULT },
+      ...model.efforts.map((effort) => ({ label: effort.label, value: effort.id })),
+    ];
+  }, [providers.data, live.exploreProvider]);
 
   return (
     <View>
@@ -94,8 +109,17 @@ function LiveEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
             hint="It may only read and search the project folder. A faster, cheaper model is usually enough."
             value={live.exploreProvider}
             options={agentOptions}
-            onValueChange={(exploreProvider) => change({ exploreProvider })}
+            onValueChange={(exploreProvider) => change({ exploreProvider, exploreEffort: MODEL_DEFAULT })}
           />
+          {effortOptions ? (
+            <SettingsSelect
+              label="Explore and setup effort"
+              hint="How much the model thinks before it answers. Lower is faster and uses less of your plan."
+              value={effortOptions.some((option) => option.value === live.exploreEffort) ? live.exploreEffort : MODEL_DEFAULT}
+              options={effortOptions}
+              onValueChange={(exploreEffort) => change({ exploreEffort })}
+            />
+          ) : null}
         </SettingsCard>
       </SettingsSection>
       <SettingsSection title="Linear status sync">
