@@ -27,6 +27,8 @@ export interface McpOptions<C> {
   tools: readonly McpTool<C>[];
   /** The caller for a bearer token, or null to refuse the request. */
   authorize(token: string): Promise<C | null>;
+  /** Why the caller gets no tools at all, or null. The tool list is then empty. */
+  closed?(caller: C): string | null;
 }
 
 const VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -50,7 +52,8 @@ export async function answer<C>(options: McpOptions<C>, message: Message, caller
   }
   if (message.id === undefined || message.id === null) return null;
   const params = (typeof message.params === "object" && message.params !== null ? message.params : {}) as Record<string, unknown>;
-  const tools = options.tools.filter((tool) => tool.allowed?.(caller) ?? true);
+  const closed = options.closed?.(caller) ?? null;
+  const tools = closed ? [] : options.tools.filter((tool) => tool.allowed?.(caller) ?? true);
   switch (message.method) {
     case "initialize": {
       const asked = typeof params.protocolVersion === "string" ? params.protocolVersion : "";
@@ -71,6 +74,7 @@ export async function answer<C>(options: McpOptions<C>, message: Message, caller
         })),
       });
     case "tools/call": {
+      if (closed) return success(message.id, text(closed, true));
       const tool = tools.find((entry) => entry.name === params.name);
       if (!tool) return failure(message.id, -32602, `Unknown tool: ${String(params.name)}`);
       try {

@@ -22,6 +22,18 @@ export const ToolPolicySchema = z.object({
   preapproved: z.array(z.object({ kind: z.literal("mcp"), server: z.string(), tool: z.string() })),
 });
 
+/** The config of an agent that start_agent starts. */
+export const AgentConfigSchema = z.object({
+  provider: z.string().min(1),
+  thinkingOptionId: z.string().optional(),
+  modeId: z.string().optional(),
+});
+export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+
+/** The agent the user chose for a sub-issue, and its name for prompts and replies. */
+export const AssignmentSchema = z.object({ config: AgentConfigSchema, label: z.string() });
+export type Assignment = z.infer<typeof AssignmentSchema>;
+
 export const ToolScopeSchema = z.object({
   /** The issue the launch started from. The tools reach it and its sub-issues. */
   root: z.string().regex(IDENTIFIER),
@@ -30,12 +42,12 @@ export const ToolScopeSchema = z.object({
   /** The Paseo project whose Linear key loaded the issue. */
   keyScope: z.string().nullable(),
   workspaceId: z.string().min(1),
+  /** The Paseo project the agent runs in. Its settings turn the tools on and off. */
+  projectId: z.string().nullable().optional(),
   /** The agent config that started agents copy. */
-  config: z.object({
-    provider: z.string().min(1),
-    thinkingOptionId: z.string().optional(),
-    modeId: z.string().optional(),
-  }),
+  config: AgentConfigSchema,
+  /** Agents the user chose for sub-issues, by issue key. start_agent uses them. */
+  assignments: z.record(z.string(), AssignmentSchema).optional(),
 });
 export type ToolScope = z.infer<typeof ToolScopeSchema>;
 
@@ -120,11 +132,26 @@ export function issueText(issue: IssueDetail): string {
 }
 
 /** Opens the prompt of an agent that start_agent makes. */
-export function childBrief(key: string, root: string): string {
+export function childBrief(key: string, root: string, edits = true): string {
   const parent = key.toUpperCase() === root.toUpperCase() ? "" : `, a sub-issue of ${root}`;
-  return [
-    `You work on Linear issue ${key}${parent}. Start your first reply with "${key}:".`,
-    `Use the ${TOOLS_SERVER} MCP tools: read_issue shows the issue, and edit_issue changes its description.`,
-    "Check off each task list item you finish by replacing `- [ ]` with `- [x]`. Do not post comments.",
-  ].join("\n");
+  const lines = [`You work on Linear issue ${key}${parent}. Start your first reply with "${key}:".`];
+  if (edits) {
+    lines.push(
+      `Use the ${TOOLS_SERVER} MCP tools: read_issue shows the issue, and edit_issue changes its description.`,
+      "Check off each task list item you finish by replacing `- [ ]` with `- [x]`. Do not post comments.",
+    );
+  } else {
+    lines.push(`Use the ${TOOLS_SERVER} MCP tool read_issue to read the issue. Do not change the issue or post comments.`);
+  }
+  return lines.join("\n");
+}
+
+/** The assignment for a sub-issue key, in any letter case. */
+export function assignmentFor(assignments: ToolScope["assignments"], key: string): Assignment | null {
+  if (!assignments) return null;
+  const wanted = key.toUpperCase();
+  for (const [entry, assignment] of Object.entries(assignments)) {
+    if (entry.toUpperCase() === wanted) return assignment;
+  }
+  return null;
 }

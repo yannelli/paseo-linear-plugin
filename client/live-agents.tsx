@@ -7,7 +7,6 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import {
   type Activity,
   type ActivityEvent,
-  type AgentFocus,
   type DirTouch,
   deriveActivity,
   type FileTouch,
@@ -40,16 +39,6 @@ export interface ChildAgent {
   cwd: string;
   color: string;
   workspaceId?: string | null;
-  /** The issue it works on, from its Linear label or a key at the start of its title. */
-  issueKey?: string | null;
-}
-
-const LEADING_KEY = /^\s*([A-Za-z][A-Za-z0-9]*-\d+)\b/;
-
-/** The issue a child agent works on, such as ENG-42 for "ENG-42: Add the form". */
-export function childIssueKey(labels: Readonly<Record<string, string>> | undefined, title: string | null) {
-  const key = labels?.["linear.issue"] ?? LEADING_KEY.exec(title ?? "")?.[1] ?? null;
-  return key ? key.toUpperCase() : null;
 }
 
 export interface ChildView {
@@ -120,7 +109,6 @@ export function useChildAgents(agentId: string, polling: boolean): ChildAgent[] 
       cwd: agent.cwd,
       color: CHILD_COLORS[index % CHILD_COLORS.length] ?? "#38bdf8",
       workspaceId: agent.workspaceId ?? null,
-      issueKey: childIssueKey(agent.labels, agent.title ?? null),
     }));
   }, [query.data]);
 }
@@ -455,68 +443,4 @@ export function useLiveAgents(input: {
     });
   }, [activity.events, subViews]);
   return { children: views, subagents, markers, files, dirs, events };
-}
-
-/** An agent that moves over the graph to what it works on. */
-export interface CursorAgent {
-  id: string;
-  kind: "main" | "child";
-  label: string;
-  color: string;
-  provider: string | null;
-  focus: AgentFocus | null;
-  /** Where it hovers when its focus is not on the graph: the issue it works on. */
-  home: AgentFocus | null;
-  running: boolean;
-  /** What it does now, such as "Read page.tsx". */
-  caption: string | null;
-  /** Subagents running inside it. */
-  satellites: number;
-}
-
-export function cursorAgents(input: {
-  theme: Theme;
-  provider: string;
-  working: boolean;
-  activity: Activity;
-  children: readonly ChildView[];
-  /** Subagents with no cursor of their own, which circle the agent instead. */
-  subagents: readonly SubagentRun[];
-}): CursorAgent[] {
-  const { activity } = input;
-  const name = input.provider ? input.provider.charAt(0).toUpperCase() + input.provider.slice(1) : "Agent";
-  const agents: CursorAgent[] = [
-    {
-      id: "main",
-      kind: "main",
-      label: name,
-      color: input.theme.colors.accent,
-      provider: input.provider,
-      focus: activity.focus,
-      home: null,
-      running: input.working,
-      caption: input.working ? (activity.current?.text ?? null) : null,
-      satellites: input.working ? input.subagents.filter((run) => run.status === "running").length : 0,
-    },
-  ];
-  for (const child of input.children) {
-    // Paths are relative to each agent's folder, so only agents in this folder fit the graph.
-    if (!child.sameRepo) continue;
-    const running = child.agent.status === "running";
-    // Finished subagents can be many, so only working ones get a cursor.
-    if (child.subagent && !running) continue;
-    agents.push({
-      id: child.agent.id,
-      kind: "child",
-      label: child.agent.title,
-      color: child.agent.color,
-      provider: null,
-      focus: child.activity?.focus ?? null,
-      home: child.agent.issueKey ? { kind: "issue", key: child.agent.issueKey } : null,
-      running,
-      caption: running ? (child.activity?.current?.text ?? null) : null,
-      satellites: 0,
-    });
-  }
-  return agents;
 }

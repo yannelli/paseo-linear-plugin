@@ -7,6 +7,7 @@ import {
   GuidanceSchema,
   linearSettings,
   type ProjectConfig,
+  type ToolSettings,
   withProjectGuidance,
 } from "../shared/settings";
 import type { PaseoProjectOption } from "./queries";
@@ -49,9 +50,21 @@ export function useProjectGuidance(project: PaseoProjectOption | null, config: P
   return { guidance, change };
 }
 
+/** The hint of an option whose Linear tools are off or limited, or null for the usual hint. */
+function toolsHint(key: (typeof GUIDANCE_KEYS)[number], tools: ToolSettings): string | null {
+  if (key === "paseoSubagents" && !tools.enabled) {
+    return "This needs the plugin's Linear tools, which are off for this project. Turn them on in Linear settings, under Agents.";
+  }
+  if (key === "updateLinear" && !(tools.enabled && tools.allowEdits)) {
+    return "Todos start with issue keys, so status sync can move each sub-issue. The agent cannot edit the issue, because the Linear tools or description edits are off for this project.";
+  }
+  return null;
+}
+
 export function GuidanceToggles(props: {
   theme: Theme;
   guidance: Guidance;
+  tools: ToolSettings;
   onChange(key: (typeof GUIDANCE_KEYS)[number], value: boolean): void;
 }) {
   const { colors } = props.theme;
@@ -67,20 +80,24 @@ export function GuidanceToggles(props: {
   );
   return (
     <View>
-      {GUIDANCE_KEYS.map((key) => (
-        <View key={key} style={styles.row}>
-          <View style={styles.body}>
-            <Text style={styles.label}>{COPY[key].label}</Text>
-            <Text style={styles.hint}>{COPY[key].hint}</Text>
+      {GUIDANCE_KEYS.map((key) => {
+        const blocked = key === "paseoSubagents" && !props.tools.enabled;
+        return (
+          <View key={key} style={styles.row}>
+            <View style={styles.body}>
+              <Text style={styles.label}>{COPY[key].label}</Text>
+              <Text style={styles.hint}>{toolsHint(key, props.tools) ?? COPY[key].hint}</Text>
+            </View>
+            <Switch
+              accessibilityLabel={COPY[key].label}
+              value={props.guidance[key] && !blocked}
+              disabled={blocked}
+              onValueChange={(value) => props.onChange(key, value)}
+              trackColor={styles.track}
+            />
           </View>
-          <Switch
-            accessibilityLabel={COPY[key].label}
-            value={props.guidance[key]}
-            onValueChange={(value) => props.onChange(key, value)}
-            trackColor={styles.track}
-          />
-        </View>
-      ))}
+        );
+      })}
     </View>
   );
 }

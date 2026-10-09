@@ -2,7 +2,7 @@ import { usePaseo } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { IssueDetail } from "../shared/linear";
-import { type AgentAction, type LinearSettings, projectEnabled } from "../shared/settings";
+import { type AgentAction, type LinearSettings, projectDefaults, projectEnabled } from "../shared/settings";
 import { type AgentPicks, resolveAgent } from "./agent-options";
 import { loadAgentPreferences } from "./agent-preferences";
 import {
@@ -69,6 +69,7 @@ export function useLaunchChoices(input: {
     projects.data?.find((entry) => entry.projectId === preferredId) ??
     (projectChoice ? null : (projects.data?.[0] ?? null));
   const projectId = project?.projectId ?? preferredId;
+  const defaults = projectDefaults(settings, projectId);
   const placements = useMemo(
     () =>
       placementOptions({
@@ -85,10 +86,10 @@ export function useLaunchChoices(input: {
     placements,
     placementChoice,
     action,
-    settings.launch.isolation,
+    defaults.launch.isolation,
   );
   const agents = providers.data ?? [];
-  const agent = resolveAgent(agents, picks, settings.launch.provider, remembered);
+  const agent = resolveAgent(agents, picks, defaults.launch.provider, remembered);
   const chooseProject = useCallback((value: string) => {
     setProjectChoice(value);
     setPlacementChoice(null);
@@ -125,6 +126,9 @@ export function useLaunchChoices(input: {
     prNumber,
     project,
     projectConfig: settings.projects.find((entry) => entry.projectId === projectId) ?? null,
+    /** Launch and tool settings with the project's own values applied. */
+    defaults,
+    remembered,
     placements,
     placement,
     chooseProject,

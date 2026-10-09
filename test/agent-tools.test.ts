@@ -1,13 +1,14 @@
 import type { Server } from "node:http";
 import { afterEach, describe, expect, it } from "vitest";
 import { z } from "zod";
-import { editText, taskCount, toolPolicy } from "../shared/agent-tools";
+import { type Assignment, childBrief, editText, taskCount, toolPolicy } from "../shared/agent-tools";
 import type { IssueDetail } from "../shared/linear";
 import type { Paseo } from "../server/agent-runs";
-import { type Grant, linearTools } from "../server/agent-tools";
+import { type Caller, linearTools, TOOLS_OFF, toolSettings } from "../server/agent-tools";
 import type { LinearAccess } from "../server/handlers";
 import { createMcpServer, listenLocal, tool } from "../server/mcp-http";
 import type { LinearService } from "../server/queries";
+import { linearSettings, type ToolSettings } from "../shared/settings";
 
 describe("editText", () => {
   const body = "Plan:\n- [ ] Add the form\n- [x] Add the route\n";
@@ -75,6 +76,22 @@ describe("MCP over HTTP", () => {
     expect(hidden.error.code).toBe(-32602);
   });
 
+  it("lists no tools and refuses calls when the caller's tools are off", async () => {
+    server = createMcpServer<string>({
+      name: "test",
+      version: "1.0.0",
+      tools: [tool({ name: "echo", description: "Echo", input: z.object({}), run: async () => "hi" })],
+      authorize: async () => "agent-1",
+      closed: () => TOOLS_OFF,
+    });
+    const port = await listenLocal(server, null);
+    const post = async (body: unknown) =>
+      json(await fetch(`http://127.0.0.1:${port}/mcp`, { method: "POST", headers: { authorization: "Bearer any" }, body: JSON.stringify(body) }));
+    expect((await post({ jsonrpc: "2.0", id: 1, method: "tools/list" })).result.tools).toEqual([]);
+    const call = await post({ jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "echo", arguments: {} } });
+    expect(call.result).toEqual({ content: [{ type: "text", text: TOOLS_OFF }], isError: true });
+  });
+
   it("refuses unknown tokens, browser requests, and other methods", async () => {
     const post = await start();
     const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
@@ -99,7 +116,16 @@ describe("Linear tools", () => {
       children: children.map((key) => ({ id: `id-${key}`, identifier: key, title: `Title ${key}`, state: state("Todo") })),
     }) as unknown as IssueDetail;
 
-  function setup() {
+  interface SetupOptions {
+    tools?: Partial<ToolSettings>;
+    assignments?: Record<string, Assignment>;
+    /** Statuses of agents that this grant already started. */
+    children?: string[];
+    /** Creating an agent with a thinking option fails, as for a model without it. */
+    noThinking?: boolean;
+  }
+
+  function setup(options: SetupOptions = {}) {
     const issues = new Map([
       ["ENG-1", issue("ENG-1", "- [ ] Plan", ["ENG-2"])],
       ["ENG-2", issue("ENG-2", "- [ ] Form\n- [ ] Tests")],
@@ -117,7 +143,10 @@ describe("Linear tools", () => {
     const created: Record<string, unknown>[] = [];
     const paseo = {
       agents: {
-        list: async () => ({ entries: [{ agent: { id: "parent-1" } }] }),
+        list: async (input: { filter: { labels: Record<string, string> } }) =>
+          input.filter.labels["linear.started-by"]
+            ? { entries: (options.children ?? []).map((status, index) => ({ agent: { id: `old-${index}`, status } })) }
+            : { entries: [{ agent: { id: "parent-1" } }] },
         ref: (id: string) => ({
           refresh: async () => ({ agent: { id, labels: { "linear.started-by": id === "child-1" ? "g1" : "other" } } }),
           waitForFinish: async () => ({ status: "idle", lastMessage: "ENG-2: done", error: null, final: null }),
@@ -126,8 +155,9 @@ describe("Linear tools", () => {
       workspaces: {
         ref: () => ({
           agents: {
-            create: async (options: Record<string, unknown>) => {
-              created.push(options);
+            create: async (agent: { config: { thinkingOptionId?: string } }) => {
+              if (options.noThinking && agent.config.thinkingOptionId) throw new Error("Unknown thinking option");
+              created.push(agent);
               return { id: "child-1" };
             },
           },
@@ -139,20 +169,30 @@ describe("Linear tools", () => {
       server: { type: "http" as const, url: "http://127.0.0.1:1/mcp", headers: { Authorization: "Bearer child" } },
       toolPolicy: toolPolicy(["read_issue", "edit_issue"]),
     });
-    const tools = new Map(linearTools({ access, dataDirectory: "/tmp" }, () => paseo, mint).map((entry) => [entry.name, entry]));
-    const grant: Grant = {
+    const deps = { access, dataDirectory: "/tmp", readSettings: async () => null };
+    const tools = new Map(linearTools(deps, () => paseo, mint).map((entry) => [entry.name, entry]));
+    const grant: Caller = {
       id: "g1",
       hash: "h",
       canStart: true,
       createdAt: "2026-10-01T00:00:00Z",
-      scope: { root: "ENG-1", home: "ENG-1", keyScope: "p1", workspaceId: "w1", config: { provider: "claude/opus", modeId: "default" } },
+      scope: {
+        root: "ENG-1",
+        home: "ENG-1",
+        keyScope: "p1",
+        workspaceId: "w1",
+        config: { provider: "claude/opus", modeId: "default" },
+        assignments: options.assignments,
+      },
+      tools: { ...toolSettings(null, null), ...options.tools },
     };
     const call = (name: string, input: unknown) => {
       const entry = tools.get(name);
       if (!entry) throw new Error(name);
       return entry.run(entry.input.parse(input), grant);
     };
-    return { call, updates, created };
+    const listed = () => [...tools.values()].filter((entry) => entry.allowed?.(grant) ?? true).map((entry) => entry.name);
+    return { call, updates, created, listed };
   }
 
   it("reads and edits issues of the tree only", async () => {
@@ -177,5 +217,53 @@ describe("Linear tools", () => {
     expect(String(created[0]?.prompt)).toMatch(/^You work on Linear issue ENG-2, a sub-issue of ENG-1\./);
     expect(await call("wait_agent", { agent_id: "child-1" })).toContain("ENG-2: done");
     await expect(call("wait_agent", { agent_id: "stranger" })).rejects.toThrow("not started by your start_agent calls");
+  });
+
+  it("hides edit_issue when edits are off, and tells children to only read", async () => {
+    const { listed, call, created } = setup({ tools: { allowEdits: false } });
+    expect(listed()).toEqual(["read_issue", "start_agent", "wait_agent"]);
+    await call("start_agent", { issue: "ENG-2", title: "ENG-2: form", prompt: "Build the form" });
+    expect(String(created[0]?.prompt)).toContain("Do not change the issue");
+    expect(childBrief("ENG-2", "ENG-1")).toContain("edit_issue changes its description");
+  });
+
+  it("starts the agent the user chose for the sub-issue, and its thinking wins", async () => {
+    const codex = { config: { provider: "codex/gpt-5.5", thinkingOptionId: "high" }, label: "Codex · GPT-5.5" };
+    const { call, created } = setup({ assignments: { "ENG-2": codex } });
+    const reply = await call("start_agent", { issue: "eng-2", title: "ENG-2: form", prompt: "Build", thinking: "low" });
+    expect(reply).toContain("It runs on Codex · GPT-5.5, the agent the user chose for ENG-2.");
+    expect(reply).toContain("so yours is not used");
+    expect(created[0]).toMatchObject({ config: { provider: "codex/gpt-5.5", thinkingOptionId: "high" } });
+    expect(created[0]?.config).not.toHaveProperty("modeId");
+  });
+
+  it("uses the caller's thinking for an assignment without one, and falls back to its default", async () => {
+    const haiku = { config: { provider: "claude/haiku" }, label: "Claude · Haiku" };
+    const { call, created } = setup({ assignments: { "ENG-2": haiku }, noThinking: true });
+    const reply = await call("start_agent", { issue: "ENG-2", title: "ENG-2: form", prompt: "Build", thinking: "max" });
+    expect(reply).toContain('no thinking option "max", so it uses its default');
+    expect(created[0]).toMatchObject({ config: { provider: "claude/haiku" } });
+  });
+
+  it("refuses to start more agents than the limit while they work", async () => {
+    const full = setup({ tools: { maxAgents: 2 }, children: ["running", "initializing", "idle"] });
+    await expect(full.call("start_agent", { issue: "ENG-2", title: "ENG-2: a", prompt: "x" })).rejects.toThrow(
+      "2 of your agents are working, and the limit is 2",
+    );
+    const room = setup({ tools: { maxAgents: 2 }, children: ["running", "idle", "error"] });
+    expect(await room.call("start_agent", { issue: "ENG-2", title: "ENG-2: a", prompt: "x" })).toContain("child-1");
+    expect(await setup({ children: ["running", "running", "running"] }).call("start_agent", { issue: "ENG-2", title: "t", prompt: "x" })).toContain("child-1");
+  });
+});
+
+describe("toolSettings", () => {
+  it("applies a project's own values over the values for all projects", () => {
+    const values = linearSettings.schema.parse({
+      tools: { maxAgents: 3 },
+      projects: [{ projectId: "p1", displayName: "One", rootPath: "/one", overrides: { tools: false, maxAgents: 0 } }],
+    });
+    expect(toolSettings(values, "p1")).toEqual({ enabled: false, allowEdits: true, assignAgents: true, maxAgents: 0 });
+    expect(toolSettings(values, "p2")).toEqual({ enabled: true, allowEdits: true, assignAgents: true, maxAgents: 3 });
+    expect(toolSettings(null, null)).toEqual({ enabled: true, allowEdits: true, assignAgents: true, maxAgents: 0 });
   });
 });

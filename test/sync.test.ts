@@ -17,6 +17,8 @@ function setup(options: {
   syncTodos: boolean;
   labels: Record<string, string>;
   access?: { allProjects: boolean; projects: Record<string, boolean> };
+  /** The shop project's own sync switch. */
+  shopSync?: boolean;
 }) {
   const hooks = new Map<string, (event: unknown, context: unknown) => Promise<void>>();
   const updates: [string, string | undefined][] = [];
@@ -49,6 +51,10 @@ function setup(options: {
   const settings = linearSettings.schema.parse({
     live: { syncTodos: options.syncTodos },
     access: options.access ?? {},
+    projects:
+      options.shopSync === undefined
+        ? []
+        : [{ projectId: "shop", displayName: "Shop", rootPath: "/w", overrides: { syncTodos: options.shopSync } }],
   });
   registerSync(server, { access, readSettings: async () => settings });
   const agent = { id: "a1", cwd: "/w", provider: "claude", labels: options.labels, workspaceId: "w1" };
@@ -99,5 +105,14 @@ describe("todo sync hook", () => {
       await turnEnded([todos]);
       expect(updates).toEqual([]);
     }
+  });
+
+  it("follows the project's own sync switch over the switch for all projects", async () => {
+    const on = setup({ syncTodos: false, shopSync: true, labels: implement });
+    await on.turnEnded([todos]);
+    expect(on.updates).toHaveLength(2);
+    const off = setup({ syncTodos: true, shopSync: false, labels: implement });
+    await off.turnEnded([todos]);
+    expect(off.updates).toEqual([]);
   });
 });

@@ -7,12 +7,7 @@ import {
 } from "@getpaseo/plugin/client/ui";
 import { useCallback, useMemo } from "react";
 import { View } from "react-native";
-import {
-  type LinearSettings,
-  type LiveView,
-  linearSettings,
-  type MappingMode,
-} from "../shared/settings";
+import { type LinearSettings, linearSettings, type MappingMode } from "../shared/settings";
 import { useProviders } from "./queries";
 import { type ReadySettings, SaveBar, SettingsGate, useSettingsDraft } from "./settings-fields";
 import type { Theme } from "./ui";
@@ -20,10 +15,6 @@ import type { Theme } from "./ui";
 const MAPPING_OPTIONS: readonly { label: string; value: MappingMode }[] = [
   { label: "Ticket text: free, rough", value: "semantic" },
   { label: "Explore agent: reads the repo first", value: "explore" },
-];
-const VIEW_OPTIONS: readonly { label: string; value: LiveView }[] = [
-  { label: "Map: files grouped by folder", value: "map" },
-  { label: "Graph: issue, files, and agents as connected nodes", value: "graph" },
 ];
 const SAME_AGENT = "";
 const MODEL_DEFAULT = "";
@@ -97,14 +88,6 @@ function LiveEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
             disabled={!live.enabled}
           />
           <SettingsSelect
-            label="Show files as"
-            hint="The view Linear Live opens with. Switch it in the panel at any time."
-            value={live.view}
-            options={VIEW_OPTIONS}
-            onValueChange={(view) => change({ view })}
-            disabled={!live.enabled}
-          />
-          <SettingsSelect
             label="Explore and setup agent"
             hint="It may only read and search the project folder. A faster, cheaper model is usually enough."
             value={live.exploreProvider}
@@ -126,7 +109,7 @@ function LiveEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
         <SettingsCard>
           <SettingsSwitch
             label="Update Linear from agent todos"
-            hint="After each turn, a todo that starts with a sub-issue key moves that sub-issue forward: In Progress, then Done. The parent moves to In Review when every sub-issue is Done. Statuses never move back."
+            hint="After each turn, a todo that starts with a sub-issue key moves that sub-issue forward: In Progress, then Done. The parent moves to In Review when every sub-issue is Done. Statuses never move back. A project can turn this on or off for itself, under Projects."
             value={live.syncTodos}
             onValueChange={(syncTodos) => change({ syncTodos })}
           />
