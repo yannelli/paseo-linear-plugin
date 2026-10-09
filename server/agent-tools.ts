@@ -4,7 +4,9 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { z } from "zod";
 import {
   AGENT_TOOLS,
+  type AgentConfig,
   agentToolsRpc,
+  assignmentFor,
   childBrief,
   EditIssueInput,
   editText,
@@ -20,6 +22,7 @@ import {
   WaitAgentInput,
 } from "../shared/agent-tools";
 import { AGENT_LABELS } from "../shared/prompts";
+import { type LinearSettings, linearSettings, projectDefaults, type ToolSettings } from "../shared/settings";
 import { lastReply, type Paseo } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
 import { createMcpServer, listenLocal, type McpTool, tool } from "./mcp-http";
@@ -46,9 +49,21 @@ const FileSchema = z.object({ port: z.number().int().nullable(), grants: z.array
 
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
 
+/** A grant with the tool settings of its project, read when the request comes in. */
+export type Caller = Grant & { tools: ToolSettings };
+
+export const TOOLS_OFF = "The Linear tools are off for this project in the Linear plugin settings in Paseo.";
+const RUNNING = new Set(["initializing", "running"]);
+
 export interface AgentToolsDependencies {
   access: LinearAccess;
   dataDirectory: string;
+  readSettings(): Promise<LinearSettings | null>;
+}
+
+/** The tool settings for a project: its own values, then the values for all projects. */
+export function toolSettings(values: LinearSettings | null, projectId: string | null | undefined): ToolSettings {
+  return projectDefaults(values ?? linearSettings.schema.parse({}), projectId).tools;
 }
 
 /** The root issue or one of its sub-issues; any other key is refused. */
@@ -62,7 +77,7 @@ async function treeIssue(linear: LinearService, scope: ToolScope, key: string | 
   return linear.getIssue(wanted);
 }
 
-export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mint: Mint): McpTool<Grant>[] {
+export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mint: Mint): McpTool<Caller>[] {
   const callers = new Map<string, string>();
   async function callerAgent(api: Paseo, grant: Grant): Promise<string | null> {
     const known = callers.get(grant.id);
@@ -71,6 +86,16 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
     const id = result.entries[0]?.agent.id ?? null;
     if (id) callers.set(grant.id, id);
     return id;
+  }
+  // Agents of one launch that still work count against the limit of the caller's project.
+  async function checkLimit(api: Paseo, caller: Caller) {
+    const limit = caller.tools.maxAgents;
+    if (limit <= 0) return;
+    const { entries } = await api.agents.list({ filter: { labels: { [AGENT_LABELS.startedBy]: caller.id } }, page: { limit: 100 } });
+    const running = entries.filter((entry) => !entry.agent.archivedAt && RUNNING.has(entry.agent.status)).length;
+    if (running >= limit) {
+      throw new Error(`${running} of your agents are working, and the limit is ${limit}. Call wait_agent for one of them, then start the next one.`);
+    }
   }
   return [
     tool({
@@ -87,6 +112,7 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
       description:
         "Change the description of a Linear issue of your issue tree. Replace exact text, for example `- [ ] Add the form` with `- [x] Add the form` to check off a task list item.",
       input: EditIssueInput,
+      allowed: (caller) => caller.tools.allowEdits,
       run(input, grant) {
         return deps.access.mutate(grant.scope.keyScope, async (linear) => {
           const issue = await treeIssue(linear, grant.scope, input.issue);
@@ -102,7 +128,7 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
     tool({
       name: "start_agent",
       description:
-        "Start a Paseo agent on a sub-issue, in your workspace, on your provider and model. It gets read_issue and edit_issue. Returns its id at once.",
+        "Start a Paseo agent on a sub-issue, in your workspace. It runs on the agent the user chose for the sub-issue, or on your provider and model. It gets the Linear tools. Returns its id at once.",
       input: StartAgentInput,
       allowed: (grant) => grant.canStart,
       async run(input, grant) {
@@ -110,15 +136,16 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
         const key = input.issue.toUpperCase();
         const { linear } = await deps.access.connect(grant.scope.keyScope);
         await treeIssue(linear, grant.scope, key);
+        await checkLimit(api, grant);
         const parent = await callerAgent(api, grant);
         const child = await mint({ ...grant.scope, home: key }, false);
         const { keyScope } = grant.scope;
-        const create = (config: ToolScope["config"]) =>
+        const create = (config: AgentConfig) =>
           api.workspaces.ref(grant.scope.workspaceId).agents.create({
             config: { ...config, mcpServers: { [TOOLS_SERVER]: child.server }, toolPolicy: child.toolPolicy },
             ...(parent ? { parent } : {}),
             title: input.title,
-            prompt: `${childBrief(key, grant.scope.root)}\n\n${input.prompt}`,
+            prompt: `${childBrief(key, grant.scope.root, grant.tools.allowEdits)}\n\n${input.prompt}`,
             labels: {
               [AGENT_LABELS.issue]: key,
               [AGENT_LABELS.action]: "implement",
@@ -127,15 +154,19 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
               [AGENT_LABELS.startedBy]: grant.id,
             },
           });
-        const base = grant.scope.config;
-        let note = "";
+        // The user's choice for the sub-issue wins over the caller's thinking.
+        const assigned = assignmentFor(grant.scope.assignments, key);
+        const base = assigned?.config ?? grant.scope.config;
+        const thinking = assigned?.config.thinkingOptionId ? undefined : input.thinking;
+        let note = assigned ? ` It runs on ${assigned.label}, the agent the user chose for ${key}.` : "";
+        if (assigned?.config.thinkingOptionId && input.thinking) note += " Its thinking is set too, so yours is not used.";
         let handle: Awaited<ReturnType<typeof create>>;
         try {
-          handle = await create(input.thinking ? { ...base, thinkingOptionId: input.thinking } : base);
+          handle = await create(thinking ? { ...base, thinkingOptionId: thinking } : base);
         } catch (error) {
-          if (!input.thinking) throw error;
+          if (!thinking) throw error;
           handle = await create(base);
-          note = ` The model has no thinking option "${input.thinking}", so it uses yours.`;
+          note += ` The model has no thinking option "${thinking}", so it uses ${assigned ? "its default" : "yours"}.`;
         }
         return `Started agent ${handle.id} on ${key}.${note} Call wait_agent with agent_id "${handle.id}" to get its result.`;
       },
@@ -196,6 +227,7 @@ export function registerAgentTools(server: PluginServerContext, deps: AgentTools
     return listening;
   };
   const mint: Mint = async (scope, canStart) => {
+    if (canStart && !toolSettings(await deps.readSettings(), scope.projectId).enabled) throw new Error(TOOLS_OFF);
     const port = await ensureListening();
     const token = randomBytes(32).toString("base64url");
     const grant: Grant = {
@@ -212,14 +244,18 @@ export function registerAgentTools(server: PluginServerContext, deps: AgentTools
       toolPolicy: toolPolicy(canStart ? [...LINEAR_TOOLS, ...AGENT_TOOLS] : [...LINEAR_TOOLS]),
     };
   };
-  const http = createMcpServer<Grant>({
+  // Settings are read on each request, so a change applies to agents that already run.
+  const http = createMcpServer<Caller>({
     name: "paseo-linear",
     version: "1.0.0",
     tools: linearTools(deps, paseo, mint),
     async authorize(token) {
       const hash = hashOf(token);
-      return (await file.read()).grants.find((grant) => grant.hash === hash) ?? null;
+      const grant = (await file.read()).grants.find((entry) => entry.hash === hash);
+      if (!grant) return null;
+      return { ...grant, tools: toolSettings(await deps.readSettings(), grant.scope.projectId) };
     },
+    closed: (caller) => (caller.tools.enabled ? null : TOOLS_OFF),
   });
 
   server.handle(agentToolsRpc, async (scope, context) => {

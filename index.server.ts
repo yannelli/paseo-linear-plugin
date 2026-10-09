@@ -30,7 +30,7 @@ export default function contribute(server: PluginServerContext) {
   registerSync(server, { access, readSettings });
   registerInit(server, { readSettings, knowledge });
   registerAgentHooks(server, dataDirectory);
-  const closeTools = registerAgentTools(server, { access, dataDirectory });
+  const closeTools = registerAgentTools(server, { access, dataDirectory, readSettings });
   server.handle(accessRpc, async () => {
     const values = await readSettings();
     return values?.access ?? linearSettings.schema.parse({}).access;

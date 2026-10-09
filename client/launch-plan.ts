@@ -9,11 +9,11 @@ import {
   type WorkflowState,
 } from "../shared/linear";
 import { agentHooksRpc } from "../shared/agent-hooks";
-import { agentToolsRpc, TOOLS_SERVER } from "../shared/agent-tools";
+import { type Assignment, agentToolsRpc, TOOLS_SERVER } from "../shared/agent-tools";
 import { launchAfterExploreRpc } from "../shared/live";
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
-import type { AgentAction, Guidance, Isolation, LinearSettings } from "../shared/settings";
-import { type AgentSelection, agentConfig } from "./agent-options";
+import type { AgentAction, Guidance, Isolation, LinearSettings, ToolSettings } from "../shared/settings";
+import { type AgentSelection, agentConfig, optionLabel } from "./agent-options";
 import { rememberLaunch } from "./agent-preferences";
 import type { PaseoProjectOption } from "./queries";
 import { errorMessage } from "./ui";
@@ -149,6 +149,30 @@ export interface LaunchRequest {
   explore: boolean;
   /** Guidance options; for Claude some also add hooks. */
   guidance: Guidance;
+  /** The tool settings of the project. */
+  tools: ToolSettings;
+  /** Agents the user chose for sub-issues. */
+  assignments: readonly SubIssueAgent[];
+}
+
+/** The agent the user chose for one sub-issue on the launch page. */
+export interface SubIssueAgent {
+  identifier: string;
+  agent: AgentSelection;
+}
+
+/** The agent's name in prompts and replies, such as "Codex · GPT-5.5 · High". */
+export function agentLabel(selection: AgentSelection): string {
+  const parts = [selection.agent.label, selection.model.label];
+  if (selection.effort) parts.push(optionLabel(selection.effort));
+  return parts.join(" · ");
+}
+
+/** The assignments as the MCP server keeps them, by issue key. */
+export function assignmentRecord(assignments: readonly SubIssueAgent[]): Record<string, Assignment> {
+  return Object.fromEntries(
+    assignments.map((entry) => [entry.identifier, { config: agentConfig(entry.agent), label: agentLabel(entry.agent) }]),
+  );
 }
 
 type AgentTools = RpcOutput<typeof agentToolsRpc>;
@@ -159,8 +183,9 @@ export function withLinearTools<C extends object>(config: C, tools: Pick<AgentTo
   return { ...config, mcpServers: { [TOOLS_SERVER]: tools.server }, toolPolicy: tools.toolPolicy };
 }
 
-/** The issue's guidance needs the MCP tools: Linear edits, or agents started on sub-issues. */
-export const needsLinearTools = (guidance: Guidance) => guidance.updateLinear || guidance.paseoSubagents;
+/** The launch needs the MCP tools for Linear edits or agents on sub-issues, when they are on. */
+export const needsLinearTools = (guidance: Guidance, tools: ToolSettings, assignments: number) =>
+  tools.enabled && (guidance.updateLinear || guidance.paseoSubagents || assignments > 0);
 
 /** The config with the issue's Claude Code hooks, loaded as a plugin with --plugin-dir. */
 export function withHookPlugin<C extends object>(config: C, pluginDir: string | null) {
@@ -268,13 +293,15 @@ export function useLaunchAgent() {
           : null;
       const config = agentConfig(request.agent);
       // Without the tools the agent still starts; its prompt then names tools it does not have.
-      const tools = needsLinearTools(request.guidance)
+      const tools = needsLinearTools(request.guidance, request.tools, request.assignments.length)
         ? await prepareTools({
             root: issue.identifier,
             home: issue.identifier,
             keyScope: request.keyScope,
             workspaceId: workspace.id,
+            projectId: request.project.projectId,
             config,
+            ...(request.assignments.length > 0 ? { assignments: assignmentRecord(request.assignments) } : {}),
           }).catch(() => null)
         : null;
       const agent = {
