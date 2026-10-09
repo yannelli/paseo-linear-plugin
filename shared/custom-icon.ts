@@ -12,6 +12,44 @@ export const LINEAR_INDIGO = "#5E6AD2";
 export const MAX_SVG_LENGTH = 64_000;
 export const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
+/** Paseo draws panel tabs, the new tab menu, and Command Center with Lucide names only. */
+export const BUILT_IN_ICON = "SquareKanban";
+export const MENU_ICONS: readonly { name: string; label: string }[] = [
+  { name: BUILT_IN_ICON, label: "Board (default)" },
+  ...[
+    ["Kanban", "Kanban"],
+    ["LayoutGrid", "Grid"],
+    ["ListTodo", "To-do list"],
+    ["ClipboardList", "Clipboard"],
+    ["CircleDot", "Circle dot"],
+    ["Target", "Target"],
+    ["Zap", "Lightning"],
+    ["Rocket", "Rocket"],
+    ["Star", "Star"],
+    ["Hexagon", "Hexagon"],
+    ["Triangle", "Triangle"],
+    ["Diamond", "Diamond"],
+    ["Box", "Box"],
+    ["Layers", "Layers"],
+    ["Compass", "Compass"],
+    ["Flag", "Flag"],
+    ["Bookmark", "Bookmark"],
+    ["Ticket", "Ticket"],
+    ["Bug", "Bug"],
+    ["Sparkles", "Sparkles"],
+    ["Bot", "Bot"],
+    ["Gem", "Gem"],
+    ["Flame", "Flame"],
+    ["Shapes", "Shapes"],
+    ["Orbit", "Orbit"],
+    ["Workflow", "Workflow"],
+    ["Puzzle", "Puzzle"],
+    ["Atom", "Atom"],
+    ["Command", "Command"],
+  ].map(([name = "", label = ""]) => ({ name, label })),
+];
+const LUCIDE_NAME = /^[A-Z][A-Za-z0-9]*$/;
+
 export const IconSettingsSchema = z.object({
   /** Checked SVG markup. Empty uses the built-in icon. */
   svg: z.string().max(MAX_SVG_LENGTH).default(""),
@@ -20,6 +58,8 @@ export const IconSettingsSchema = z.object({
   color: z.string().regex(HEX_COLOR).default(LINEAR_INDIGO),
   /** Fill shapes that only have an outline. */
   solid: z.boolean().default(false),
+  /** The Lucide icon for panel tabs, the new tab menu, and Command Center. */
+  menu: z.string().regex(LUCIDE_NAME).default(BUILT_IN_ICON),
 });
 export type IconSettings = z.infer<typeof IconSettingsSchema>;
 

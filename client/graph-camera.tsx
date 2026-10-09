@@ -1,19 +1,30 @@
 import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Easing, type GestureResponderHandlers, PanResponder, View } from "react-native";
-import { type Box, type Camera, clampCamera, FIT, frameBox, MAX_ZOOM, MIN_ZOOM, zoomAt } from "../shared/graph-camera";
+import {
+  type Box,
+  type Camera,
+  clampCamera,
+  FIT,
+  type Focus,
+  frameBox,
+  growth,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  zoomAt,
+} from "../shared/graph-camera";
 import { NATIVE_DRIVER } from "./live-timeline";
 import { ToolButton, ToolGroup } from "./tool-buttons";
 import type { Theme } from "./ui";
 import { listenWheel } from "./web";
 
 // Animated values move the graph canvas, so a wheel or a drag never renders the graph again.
-// Nodes, edges, and cursors scale by the inverse zoom, so they keep their size on screen.
+// Nodes, edges, labels, and cursors scale back part of the zoom, so they grow less than it.
 
 export interface CameraOptions {
   width: number;
   height: number;
   /** Where auto mode looks; null shows the whole graph. */
-  focus: Box | null;
+  focus: Box | Focus | null;
   auto: boolean;
   /** Wheel and drag move the page, not the camera. */
   locked: boolean;
@@ -28,8 +39,8 @@ export interface CameraControl {
   ref: RefObject<View | null>;
   handlers: GestureResponderHandlers;
   transform: [{ translateX: Animated.Value }, { translateY: Animated.Value }, { scale: Animated.Value }];
-  /** One over the zoom: the scale that keeps a canvas item its own size on screen. */
-  inverse: Animated.AnimatedInterpolation<number>;
+  /** The scale of canvas items, so they draw at growth(zoom) times their size on screen. */
+  itemScale: Animated.AnimatedInterpolation<number>;
   limit: ZoomLimit;
   /** The camera once it stops moving; labels are placed for it. */
   settled: Camera;
@@ -40,6 +51,8 @@ export interface CameraControl {
 const ZOOM_STEP = 1.5;
 const DRAG_START = 6;
 const SETTLE_MS = 160;
+/** Zooms where the item scale is exact; it is linear between them. */
+const ZOOM_SAMPLES = [1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
 
 type Touch = { pageX: number; pageY: number };
 const spreadOf = (touches: readonly Touch[]) => {
@@ -49,7 +62,13 @@ const spreadOf = (touches: readonly Touch[]) => {
 
 export function useGraphCamera(options: CameraOptions): CameraControl {
   const [values] = useState(() => ({ x: new Animated.Value(0), y: new Animated.Value(0), zoom: new Animated.Value(1) }));
-  const [inverse] = useState(() => Animated.divide<number>(new Animated.Value(1), values.zoom));
+  const [itemScale] = useState(() =>
+    values.zoom.interpolate({
+      inputRange: ZOOM_SAMPLES,
+      outputRange: ZOOM_SAMPLES.map((zoom) => growth(zoom) / zoom),
+      extrapolate: "clamp",
+    }),
+  );
   const [limit, setLimit] = useState<ZoomLimit>("min");
   const [settled, setSettled] = useState<Camera>(FIT);
   const pause = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -99,7 +118,8 @@ export function useGraphCamera(options: CameraOptions): CameraControl {
   );
 
   const { width, height, auto, locked, focus } = options;
-  const focusKey = focus ? [focus.left, focus.top, focus.right, focus.bottom].map(Math.round).join(",") : "";
+  const center = focus && "center" in focus ? [focus.center.x, focus.center.y] : [];
+  const focusKey = focus ? [focus.left, focus.top, focus.right, focus.bottom, ...center].map(Math.round).join(",") : "";
   useEffect(() => {
     if (width === 0 || !auto) return;
     const box = latest.current.focus;
@@ -168,7 +188,7 @@ export function useGraphCamera(options: CameraOptions): CameraControl {
     [move],
   );
   const fit = useCallback(() => move(FIT, true), [move]);
-  return { ref, handlers, transform, inverse, limit, settled, zoomBy, fit };
+  return { ref, handlers, transform, itemScale, limit, settled, zoomBy, fit };
 }
 
 export function CameraButtons(props: {

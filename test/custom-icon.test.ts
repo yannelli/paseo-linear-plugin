@@ -4,6 +4,7 @@ import {
   IconSettingsSchema,
   iconMarkup,
   LINEAR_INDIGO,
+  MENU_ICONS,
   paintColor,
   parseIconSvg,
   safeColor,
@@ -98,7 +99,7 @@ describe("icon transforms", () => {
 
   it("resolves each paint, with defaults that keep the icon as drawn", () => {
     const icon = IconSettingsSchema.parse({});
-    expect(icon).toEqual({ svg: "", paint: "original", color: LINEAR_INDIGO, solid: false });
+    expect(icon).toEqual({ svg: "", paint: "original", color: LINEAR_INDIGO, solid: false, menu: "SquareKanban" });
     const colors = { ink: "#111111", accent: "#222222" };
     expect(paintColor(icon, colors)).toBeNull();
     expect(paintColor({ ...icon, paint: "theme" }, colors)).toBe("#111111");
@@ -106,5 +107,7 @@ describe("icon transforms", () => {
     expect(paintColor({ ...icon, paint: "linear" }, colors)).toBe(LINEAR_INDIGO);
     expect(paintColor({ ...icon, paint: "custom", color: "#abcdef" }, colors)).toBe("#abcdef");
     expect(IconSettingsSchema.safeParse({ color: "red" }).success).toBe(false);
+    expect(IconSettingsSchema.safeParse({ menu: "rocket" }).success).toBe(false);
+    expect(new Set(MENU_ICONS.map((entry) => entry.name)).size).toBe(MENU_ICONS.length);
   });
 });

@@ -8,6 +8,7 @@ import {
   SettingsSelect,
   SettingsSwitch,
 } from "@getpaseo/plugin/client/ui";
+import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useCallback, useMemo, useState } from "react";
 import { Platform, Text, View } from "react-native";
 import {
@@ -15,10 +16,11 @@ import {
   type IconPaint,
   type IconSettings,
   MAX_SVG_LENGTH,
+  MENU_ICONS,
   parseIconSvg,
 } from "../shared/custom-icon";
 import { linearSettings } from "../shared/settings";
-import { IconGlyph } from "./plugin-icon";
+import { IconGlyph, useIconSettings } from "./plugin-icon";
 import { MultilineField, type ReadySettings, SaveBar, SettingsGate, useSettingsDraft } from "./settings-fields";
 import type { Theme } from "./ui";
 import { canPickFiles, pickTextFile } from "./web";
@@ -37,6 +39,7 @@ const MAX_FILE_BYTES = MAX_SVG_LENGTH * 4;
 
 export function IconSettingsScreen({ theme }: PluginSurfaceProps) {
   const settings = useSettings(linearSettings);
+  useIconSettings();
   const render = useCallback(
     (ready: ReadySettings) => <IconEditor theme={theme} settings={ready} />,
     [theme],
@@ -85,6 +88,33 @@ function IconPreview({ theme, icon }: { theme: Theme; icon: IconSettings }) {
   );
 }
 
+function MenuPreview({ theme, name }: { theme: Theme; name: string }) {
+  const { colors } = theme;
+  const styles = useMemo(
+    () => ({
+      tab: {
+        flexDirection: "row" as const,
+        alignSelf: "flex-start" as const,
+        alignItems: "center" as const,
+        gap: 6,
+        marginTop: 8,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 6,
+        backgroundColor: colors.surface2,
+      },
+      label: { color: colors.foreground, fontSize: 12 },
+    }),
+    [colors],
+  );
+  return (
+    <View style={styles.tab}>
+      <Icon name={name} size={14} color={colors.foregroundMuted} />
+      <Text style={styles.label}>Linear</Text>
+    </View>
+  );
+}
+
 function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings }) {
   const { values, dirty, edit, save, discard } = useSettingsDraft(settings);
   const icon = values.icon;
@@ -123,7 +153,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
       }),
     [applyMarkup],
   );
-  const useBuiltIn = useCallback(() => {
+  const removeSvg = useCallback(() => {
     setFileName(null);
     applyMarkup("");
   }, [applyMarkup]);
@@ -145,6 +175,11 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
   }, [discard, settings.values.icon.svg]);
   const native = Platform.OS !== "web";
   const custom = icon.svg !== "";
+  const menuOptions = useMemo(() => {
+    const options = MENU_ICONS.map((entry) => ({ label: entry.label, value: entry.name }));
+    if (!options.some((option) => option.value === icon.menu)) options.push({ label: icon.menu, value: icon.menu });
+    return options;
+  }, [icon.menu]);
 
   return (
     <View>
@@ -155,7 +190,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
             hint={
               native
                 ? "The iOS and Android apps cannot draw plugin SVG images, so they show the built-in icon in the color you choose."
-                : "Composer pills, the Linear sidebar row, and Linear screens use this icon. Paseo menus and panel tabs keep the built-in icon."
+                : "Composer pills, the Linear sidebar row, and Linear screens use this icon. Panel tabs and menus use the built-in icon below."
             }
           >
             <IconPreview theme={theme} icon={icon} />
@@ -179,11 +214,11 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
             onChange={applyMarkup}
           />
           <SettingsAction
-            label="Built-in icon"
-            hint="Remove your SVG and use the Linear board icon."
-            actionLabel="Use built-in"
+            label="Remove SVG"
+            hint="Use the built-in icon everywhere."
+            actionLabel="Remove"
             disabled={!custom && markup === ""}
-            onPress={useBuiltIn}
+            onPress={removeSvg}
           />
         </SettingsCard>
       </SettingsSection>
@@ -208,11 +243,25 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
           ) : null}
           <SettingsSwitch
             label="Solid"
-            hint={custom ? "Fill shapes that only have an outline, so line icons show as solid shapes." : "Add your SVG to use this. The built-in icon stays as drawn."}
+            hint={custom ? "Fill shapes that only have an outline, so line icons show as solid shapes." : "Add an SVG to use this. Built-in icons stay as drawn."}
             value={icon.solid}
             disabled={!custom}
             onValueChange={(solid) => change({ solid })}
           />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Built-in icon">
+        <SettingsCard>
+          <SettingsSelect
+            label="Built-in icon"
+            hint="Panel tabs, the new tab menu, and Command Center take built-in icons only, so they use this one. Without an SVG, every place uses it. Tabs that are open change when you reload Paseo or open them again."
+            value={icon.menu}
+            options={menuOptions}
+            onValueChange={(menu) => change({ menu })}
+          />
+          <SettingsRow label="Tab preview">
+            <MenuPreview theme={theme} name={icon.menu} />
+          </SettingsRow>
         </SettingsCard>
       </SettingsSection>
       <SaveBar
