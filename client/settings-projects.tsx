@@ -24,6 +24,7 @@ import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
 import { ProjectSetup } from "./project-init";
 import { ProjectKnowledgeSection } from "./project-knowledge";
 import { AccessSection } from "./settings-access";
+import { ProjectOverridesSection } from "./settings-overrides";
 import { type PaseoProjectOption, useAuthStatus, useCatalog, useProjects } from "./queries";
 import {
   MultilineField,
@@ -149,6 +150,7 @@ function ProjectEditor(props: {
           <SettingsRow label="Folder" hint={config.rootPath || "Unknown"} />
         </SettingsCard>
       </SettingsSection>
+      <ProjectOverridesSection values={values} config={config} change={change} />
       <TeamsSection config={config} change={change} />
       {paseoProject ? <ProjectKnowledgeSection projectId={paseoProject.projectId} /> : null}
       <ProjectSetup theme={theme} config={config} change={change} openAgent={props.openAgent} />

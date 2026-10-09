@@ -13,7 +13,6 @@ import {
   type LaunchInput,
   launchAfterExploreRpc,
   clearMapRpc,
-  linksRpc,
   listFilesRpc,
   subagentLogsRpc,
   liveMapRpc,
@@ -31,7 +30,6 @@ import {
 } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
 import { type KnowledgeService, knowledgeFor } from "./knowledge";
-import { fileLinks } from "./links";
 import { subagentLogs } from "./subagent-logs";
 import type { LaunchQueue, MapStore } from "./stores";
 
@@ -228,11 +226,6 @@ export function registerLive(server: PluginServerContext, dependencies: LiveDepe
   server.handle(listFilesRpc, async ({ agentId, dirs }, { paseo }) => {
     const agent = await agentInfo(paseo, agentId);
     return { dirs: await listDirectories(agent.cwd, dirs) };
-  });
-
-  server.handle(linksRpc, async ({ agentId, files }, { paseo }) => {
-    const agent = await agentInfo(paseo, agentId);
-    return { links: await fileLinks(agent.cwd, files) };
   });
 
   server.handle(liveProjectRpc, async ({ agentId, paths }, { paseo }) => {

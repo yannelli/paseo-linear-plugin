@@ -11,8 +11,8 @@ import { withHookPlugin } from "../client/launch-plan";
 import { registerAgentHooks } from "../server/agent-hooks";
 import { claudeHooks, shellQuote } from "../shared/agent-hooks";
 import type { IssueDetail } from "../shared/linear";
-import { guidanceSections } from "../shared/prompts";
-import { GuidanceSchema, linearSettings, withProjectGuidance } from "../shared/settings";
+import { ALL_TOOLS, guidanceSections } from "../shared/prompts";
+import { GuidanceSchema, linearSettings, projectDefaults, withProjectGuidance } from "../shared/settings";
 
 const ALL = { updateLinear: true, subagentKeys: true, paseoSubagents: true };
 const NONE = GuidanceSchema.parse({});
@@ -31,6 +31,54 @@ describe("guidance in the prompt", () => {
     expect(sections[0]).toContain("edit_issue");
     expect(sections[0]).toContain("Do not post comments.");
     expect(sections[2]).toContain("start_agent");
+  });
+
+  it("leaves out tools that are off, and edits when only reading is allowed", () => {
+    const off = guidanceSections(issue, ALL, { ...ALL_TOOLS, enabled: false });
+    expect(off).toHaveLength(2);
+    expect(off[0]).toContain('"ENG-2: add the form"');
+    expect(off[0]).toContain("Do not change the issue or post comments.");
+    expect(off.join("\n")).not.toMatch(/edit_issue|read_issue|start_agent/);
+    const read = guidanceSections(issue, ALL, { ...ALL_TOOLS, allowEdits: false })[0];
+    expect(read).toContain("read_issue");
+    expect(read).not.toContain("edit_issue");
+  });
+
+  it("lists the agents chosen for sub-issues, with the limit", () => {
+    const tools = { ...ALL_TOOLS, maxAgents: 2, assignments: [{ identifier: "ENG-2", label: "Codex · GPT-5.5" }] };
+    const alone = guidanceSections(issue, NONE, tools);
+    expect(alone).toHaveLength(1);
+    expect(alone[0]).toContain("- ENG-2: Codex · GPT-5.5");
+    expect(alone[0]).toContain("wait_agent");
+    expect(alone[0]).toContain("Run at most 2 of these agents");
+    const both = guidanceSections(issue, { ...NONE, paseoSubagents: true }, tools);
+    expect(both).toHaveLength(2);
+    expect(both[0]).toContain("or on the agent the user chose for the sub-issue");
+    expect(both[1]).not.toContain("wait_agent");
+    expect(guidanceSections(issue, NONE, { ...tools, enabled: false })).toEqual([]);
+  });
+
+  it("applies a project's own values over the values for all projects", () => {
+    const values = linearSettings.schema.parse({
+      launch: { provider: "claude/opus", includeComments: false },
+      live: { syncTodos: true },
+      projects: [
+        {
+          projectId: "p1",
+          displayName: "Shop",
+          rootPath: "/shop",
+          overrides: { provider: "", isolation: "workspace", syncTodos: false, assignAgents: false },
+        },
+      ],
+    });
+    const own = projectDefaults(values, "p1");
+    expect(own.launch).toEqual({ provider: "", isolation: "workspace", includeComments: false, moveToStarted: true, assignToMe: true });
+    expect(own.syncTodos).toBe(false);
+    expect(own.tools).toEqual({ enabled: true, allowEdits: true, assignAgents: false, maxAgents: 0 });
+    const shared = projectDefaults(values, "p2");
+    expect(shared.launch.provider).toBe("claude/opus");
+    expect(shared.syncTodos).toBe(true);
+    expect(projectDefaults(values, null)).toEqual(shared);
   });
 
   it("saves guidance to a project, adding the project when it is new", () => {

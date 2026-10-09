@@ -3,14 +3,19 @@ import { describe, expect, it, vi } from "vitest";
 // The plan's helpers are pure; stub the React Native imports the module pulls in.
 vi.mock("../client/ui", () => ({ errorMessage: (error: unknown) => String(error) }));
 vi.mock("@getpaseo/plugin/client", () => ({ usePaseo: () => null, useRpc: () => null }));
+import type { AgentSelection } from "../client/agent-options";
 import {
+  agentLabel,
+  assignmentRecord,
   type LaunchRequest,
+  needsLinearTools,
   openWorkspace,
   type Paseo,
   placementOptions,
   resolvePlacement,
 } from "../client/launch-plan";
 import type { PaseoProjectOption } from "../client/queries";
+import { GuidanceSchema, linearSettings } from "../shared/settings";
 
 const project: PaseoProjectOption = {
   projectId: "p1",
@@ -81,5 +86,33 @@ describe("opening the issue branch", () => {
     const { create, opened } = review(new Error("Branch already checked out"));
     await expect(opened).rejects.toThrow("Branch already checked out");
     expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Linear tools at launch", () => {
+  const tools = linearSettings.schema.parse({}).tools;
+  const none = GuidanceSchema.parse({});
+
+  it("asks for the tools only when an option needs them and they are on", () => {
+    expect(needsLinearTools(none, tools, 0)).toBe(false);
+    expect(needsLinearTools({ ...none, updateLinear: true }, tools, 0)).toBe(true);
+    expect(needsLinearTools(none, tools, 1)).toBe(true);
+    expect(needsLinearTools({ ...none, paseoSubagents: true }, { ...tools, enabled: false }, 2)).toBe(false);
+  });
+
+  it("names each chosen agent and keeps its config by issue key", () => {
+    const selection = {
+      agent: { id: "codex", label: "Codex" },
+      model: { id: "gpt-5.5", label: "GPT-5.5" },
+      effort: { id: "xhigh", label: "xhigh" },
+      mode: { id: "auto", label: "Auto" },
+    } as unknown as AgentSelection;
+    expect(agentLabel(selection)).toBe("Codex · GPT-5.5 · Extra high");
+    expect(assignmentRecord([{ identifier: "ENG-2", agent: selection }])).toEqual({
+      "ENG-2": {
+        config: { provider: "codex/gpt-5.5", thinkingOptionId: "xhigh", modeId: "auto" },
+        label: "Codex · GPT-5.5 · Extra high",
+      },
+    });
   });
 });
