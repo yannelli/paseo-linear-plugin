@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main, beta]
+    branches: [main, beta, alpha]
   workflow_dispatch:
 
 permissions:
@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/alpha'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -47,6 +47,8 @@ jobs:
             echo "npm already has $name@$version"
           elif [[ "$version" == *-beta.* ]]; then
             npm publish --tag beta
+          elif [[ "$version" == *-alpha.* ]]; then
+            npm publish --tag alpha
           else
             npm publish
           fi

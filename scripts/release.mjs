@@ -6,9 +6,9 @@ import { pathToFileURL } from "node:url";
 import { manifestPaths, prepare, verifyConditions } from "./release-manifests.mjs";
 
 const stableTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
-const betaTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-beta\.(0|[1-9]\d*)$/;
+const prereleaseTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(alpha|beta)\.(0|[1-9]\d*)$/;
 // Each release branch and the prerelease channel it publishes to; main publishes stable versions.
-const channels = { main: null, beta: "beta" };
+const channels = { main: null, beta: "beta", alpha: "alpha" };
 const levels = { patch: 1, minor: 2, major: 3 };
 const releaseMarker = "<!-- paseo-linear-release -->";
 
@@ -34,11 +34,11 @@ export function nextVersion(version, commits) {
   return `${major}.${minor}.${patch + 1n}`;
 }
 
-/** The next beta toward a stable version, after the betas already tagged for it. */
-export function nextBeta(stable, tags) {
-  const prefix = `v${stable}-beta.`;
-  const numbers = tags.filter((tag) => tag.startsWith(prefix) && betaTag.test(tag)).map((tag) => Number(tag.slice(prefix.length)));
-  return `${stable}-beta.${numbers.length ? Math.max(...numbers) + 1 : 0}`;
+/** The next prerelease of a channel toward a stable version, after the ones already tagged for it. */
+export function nextPrerelease(stable, tags, channel = "beta") {
+  const prefix = `v${stable}-${channel}.`;
+  const numbers = tags.filter((tag) => tag.startsWith(prefix) && prereleaseTag.test(tag)).map((tag) => Number(tag.slice(prefix.length)));
+  return `${stable}-${channel}.${numbers.length ? Math.max(...numbers) + 1 : 0}`;
 }
 
 function compareStable(a, b) {
@@ -85,7 +85,7 @@ export function releaseNotes(version, previousTag, commits) {
 }
 
 async function publishRelease(tag, notes, repository) {
-  const prerelease = betaTag.test(tag);
+  const prerelease = prereleaseTag.test(tag);
   const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
   if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required to publish a release");
   const endpoint = `${process.env.GITHUB_API_URL || "https://api.github.com"}/repos/${repository}/releases`;
@@ -108,27 +108,27 @@ async function publishRelease(tag, notes, repository) {
 export async function release({ dryRun = true } = {}) {
   const cwd = process.cwd();
   const branch = git("branch", "--show-current");
-  if (!Object.hasOwn(channels, branch)) throw new Error("Releases run from main or beta");
+  if (!Object.hasOwn(channels, branch)) throw new Error("Releases run from main, beta, or alpha");
   const channel = channels[branch];
   if (git("status", "--porcelain")) throw new Error("Release checkout must be clean");
   const currentVersion = await verifyConditions({}, { cwd });
   const merged = git("tag", "--merged", "HEAD", "--sort=-version:refname").split("\n");
   const previousTag = merged.find((tag) => stableTag.test(tag));
-  // A beta manifest is allowed on main after a beta branch merges; the next stable release replaces it.
-  const [currentStable, currentBeta] = currentVersion.split("-");
-  if (previousTag && !currentBeta && `v${currentVersion}` !== previousTag) throw new Error(`Manifest version ${currentVersion} does not match ${previousTag}`);
-  if (previousTag && currentBeta && compareStable(currentStable, previousTag.slice(1)) <= 0) {
+  // A prerelease manifest is allowed on main after a prerelease branch merges; the next stable release replaces it.
+  const [currentStable, currentPrerelease] = currentVersion.split("-");
+  if (previousTag && !currentPrerelease && `v${currentVersion}` !== previousTag) throw new Error(`Manifest version ${currentVersion} does not match ${previousTag}`);
+  if (previousTag && currentPrerelease && compareStable(currentStable, previousTag.slice(1)) <= 0) {
     throw new Error(`Manifest version ${currentVersion} is not ahead of ${previousTag}`);
   }
-  if (channel && !previousTag) throw new Error("A beta needs a stable release first");
+  if (channel && !previousTag) throw new Error(`${channel === "alpha" ? "An alpha" : "A beta"} needs a stable release first`);
   const commits = commitsSince(previousTag);
   const stable = previousTag ? nextVersion(previousTag.slice(1), commits) : currentVersion;
   let version = stable;
   if (channel && stable) {
-    // Only a release-triggering commit since the last beta makes a new beta.
-    const lastBeta = merged.find((tag) => betaTag.test(tag) && tag.startsWith(`v${stable}-`));
-    const fresh = lastBeta ? nextVersion("0.0.0", commitsSince(lastBeta)) : stable;
-    version = fresh ? nextBeta(stable, git("tag", "--list").split("\n")) : null;
+    // Only a release-triggering commit since the channel's last prerelease makes a new one.
+    const last = merged.find((tag) => prereleaseTag.test(tag) && tag.startsWith(`v${stable}-${channel}.`));
+    const fresh = last ? nextVersion("0.0.0", commitsSince(last)) : stable;
+    version = fresh ? nextPrerelease(stable, git("tag", "--list").split("\n"), channel) : null;
   }
   const repository = process.env.GITHUB_REPOSITORY;
   if (!dryRun) {

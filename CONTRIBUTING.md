@@ -137,7 +137,11 @@ You do not need to change version numbers. When a release-triggering commit land
 
 To publish a change for testing before a stable release, open the pull request against the `beta` branch. A release-triggering commit on `beta` publishes the next version as a beta, such as `1.1.0-beta.0`. The beta goes to npm with the `beta` dist-tag and to GitHub as a prerelease, so `latest` does not change. Install it with `paseo plugin add npm:@yannelli/paseo-linear-plugin@beta`. When the beta is ready, merge `beta` into `main` to release the stable version.
 
-To preview the next release, run `npm run release:dry-run` on a clean `main` or `beta` checkout with all tags fetched. See [npm publishing](docs/npm-publishing.md) for the publishing setup.
+### Alpha releases
+
+For a change that needs testing before it goes to beta users, open the pull request against the `alpha` branch. A release-triggering commit on `alpha` publishes the next version as an alpha, such as `1.1.0-alpha.0`. The alpha goes to npm with the `alpha` dist-tag and to GitHub as a prerelease, so `latest` and `beta` do not change. Install it with `paseo plugin add npm:@yannelli/paseo-linear-plugin@alpha`, or update an installed plugin with `paseo plugin update paseo-linear-plugin --version alpha`. When the alpha is ready, merge `alpha` into `beta`.
+
+To preview the next release, run `npm run release:dry-run` on a clean `main`, `beta`, or `alpha` checkout with all tags fetched. See [npm publishing](docs/npm-publishing.md) for the publishing setup.
 
 ## License
 
