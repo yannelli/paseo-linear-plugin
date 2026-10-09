@@ -1,10 +1,10 @@
 import type { PluginAgentSnapshot } from "@getpaseo/plugin";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Animated, StyleSheet, Text, View } from "react-native";
 import type { ActivityEvent } from "../shared/activity";
 import type { IssueDetail } from "../shared/linear";
-import type { LiveView, MappingMode } from "../shared/settings";
+import type { MappingMode } from "../shared/settings";
 import { todoStatus } from "../shared/todo-sync";
 import { eventTone, KIND_ICONS } from "./live-feed";
 import { type IssueProgress, MONO, ProgressBar } from "./live-issues";
@@ -289,7 +289,7 @@ export function MapActions(props: { theme: Theme; live: LiveMap }) {
   const rebuild = useCallback(() => explore(true), [explore]);
   return (
     <ToolGroup theme={theme}>
-      <ToolButton theme={theme} icon="RefreshCw" label="Read files and links again" onPress={refresh} />
+      <ToolButton theme={theme} icon="RefreshCw" label="Read the files again" onPress={refresh} />
       <ToolButton
         theme={theme}
         icon="Sparkles"
@@ -306,60 +306,5 @@ export function MapActions(props: { theme: Theme; live: LiveMap }) {
         onPress={clear}
       />
     </ToolGroup>
-  );
-}
-
-export function ViewToggle(props: {
-  theme: Theme;
-  value: LiveView;
-  onChange(value: LiveView): void;
-}) {
-  const { colors } = props.theme;
-  const styles = useMemo(() => {
-    const option = {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 5,
-      height: 24,
-      paddingHorizontal: 9,
-      borderRadius: 6,
-    } as const;
-    return {
-      track: {
-        flexDirection: "row",
-        padding: 2,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface1,
-      },
-      option,
-      on: { ...option, backgroundColor: colors.surface2 },
-      text: { color: colors.foregroundMuted, fontSize: 12 },
-      textOn: { color: colors.foreground, fontSize: 12, fontWeight: "500" },
-    } as const;
-  }, [colors]);
-  const options = [
-    { value: "map", label: "Map", icon: "LayoutGrid" },
-    { value: "graph", label: "Graph", icon: "Waypoints" },
-  ] as const;
-  return (
-    <View style={styles.track} accessibilityRole="tablist">
-      {options.map((option) => {
-        const on = props.value === option.value;
-        return (
-          <Pressable
-            key={option.value}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: on }}
-            onPress={() => props.onChange(option.value)}
-            style={on ? styles.on : styles.option}
-          >
-            <Icon name={option.icon} size={12} color={on ? colors.foreground : colors.foregroundMuted} />
-            <Text style={on ? styles.textOn : styles.text}>{option.label}</Text>
-          </Pressable>
-        );
-      })}
-    </View>
   );
 }

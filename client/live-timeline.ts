@@ -5,18 +5,15 @@ import { AccessibilityInfo, Platform } from "react-native";
 import type { DirTouch, FileTouch, TimelineItemLike } from "../shared/activity";
 import { type AreaRef, liveProjectRpc, MAX_RESOLVE_PATHS } from "../shared/knowledge";
 import type { IssueDetail } from "../shared/linear";
-import type { FileLink } from "../shared/links";
 import {
   clearMapRpc,
   exploreRpc,
   type IssueMap,
   type Job,
   listFilesRpc,
-  linksRpc,
   liveMapRpc,
   type SubagentLog,
   subagentLogsRpc,
-  MAX_LINK_FILES,
   MAX_LIST_DIRS,
   type MapFile,
   semanticMap,
@@ -250,7 +247,7 @@ export interface LiveMap {
   starting: boolean;
   error: string | null;
   explore(force: boolean): void;
-  /** Reads the map, folder listings, links, and subagents again. */
+  /** Reads the map, folder listings, and subagents again. */
   refresh(): void;
   /** Forgets the saved explore map; the map falls back to the ticket text. */
   clear(): void;
@@ -359,31 +356,6 @@ export function useMapModel(
     () => ({ ...buildMapModel(files, touches, byDir, explored, areas), ready }),
     [files, touches, byDir, explored, areas, ready],
   );
-}
-
-const NO_LINKS: readonly FileLink[] = [];
-
-/** Links between the graph's files. `version` changes when files change, to read them again. */
-export function useFileLinks(
-  agentId: string,
-  files: readonly string[],
-  version: number,
-  enabled: boolean,
-): { links: readonly FileLink[]; ready: boolean } {
-  const read = useRpc(linksRpc);
-  const sorted = useMemo(() => [...files].sort().slice(0, MAX_LINK_FILES), [files]);
-  const query = useQuery({
-    queryKey: ["linear", "live", "links", agentId, sorted, version],
-    queryFn: () => read({ agentId, files: sorted }),
-    enabled: enabled && sorted.length > 0,
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-  });
-  return {
-    links: query.data?.links ?? NO_LINKS,
-    // With no files or a failed read the graph shows without links rather than waiting.
-    ready: sorted.length === 0 || query.data !== undefined || query.isError,
-  };
 }
 
 const NO_RUNS: readonly SubagentLog[] = [];

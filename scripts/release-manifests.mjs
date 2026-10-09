@@ -2,8 +2,8 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export const manifestPaths = ["package.json", "package-lock.json"];
-// Stable versions, and betas toward one, such as 1.2.0-beta.0.
-const releaseVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-beta\.(0|[1-9]\d*))?$/;
+// Stable versions, and alphas or betas toward one, such as 1.2.0-alpha.0 or 1.2.0-beta.0.
+const releaseVersion = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-(alpha|beta)\.(0|[1-9]\d*))?$/;
 
 async function readManifests(cwd) {
   const documents = await Promise.all(manifestPaths.map(async (path) => JSON.parse(await readFile(join(cwd, path), "utf8"))));

@@ -2,7 +2,7 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import type { WorkflowState } from "../shared/linear";
 import { syncNowRpc } from "../shared/live";
 import { AGENT_LABELS, isInternalAgent } from "../shared/prompts";
-import { type LinearSettings, projectEnabled } from "../shared/settings";
+import { type LinearSettings, projectDefaults, projectEnabled } from "../shared/settings";
 import { planStatusMoves, progressByKey, type TodoLike } from "../shared/todo-sync";
 import type { Paseo } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
@@ -85,11 +85,15 @@ export function registerSync(server: PluginServerContext, dependencies: SyncDepe
     paseo: Paseo,
     agentId: string,
     todos: readonly TodoLike[] | null,
+    automatic = false,
   ): Promise<SyncResult> {
     const agent = await agentInfo(paseo, agentId);
     const settings = await readSettings();
     if (settings && !projectEnabled(settings.access, agent.projectId)) {
       return { moves: [], skipped: "Linear is off for this project." };
+    }
+    if (automatic && !(settings && projectDefaults(settings, agent.projectId).syncTodos)) {
+      return { moves: [], skipped: "Todo sync is off for this project." };
     }
     const identifier = agent.labels[AGENT_LABELS.issue];
     if (!identifier || isInternalAgent(agent.labels)) {
@@ -111,13 +115,15 @@ export function registerSync(server: PluginServerContext, dependencies: SyncDepe
     return queued(identifier, () => syncIssue(identifier, projectId, todoItems));
   }
 
+  // A project can turn sync on or off for itself, so the check needs the agent's project.
   server.on("agent.turn_ended", async (event, { paseo }) => {
     const settings = await readSettings();
-    if (!settings?.live.syncTodos) return;
+    const anyOn = settings?.live.syncTodos || settings?.projects.some((entry) => entry.overrides.syncTodos);
+    if (!anyOn) return;
     const todos = latestTodos(event.timeline);
     if (!todos) return;
     try {
-      await syncAgent(paseo, event.agent.id, todos);
+      await syncAgent(paseo, event.agent.id, todos, true);
     } catch (error) {
       console.error("Linear sync failed", error);
     }

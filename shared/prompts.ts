@@ -115,23 +115,48 @@ export interface ComposePromptInput {
   extraInstructions: string;
   /** Launch options that add instructions; the project's saved ones when omitted. */
   guidance?: Guidance;
+  /** The Linear tools the agent gets; all of them when omitted. */
+  tools?: PromptTools;
 }
 
+/** What the prompt may tell the agent about the plugin's linear MCP server. */
+export interface PromptTools {
+  /** The agent gets the server. */
+  enabled: boolean;
+  /** The server has edit_issue. */
+  allowEdits: boolean;
+  /** Agents that start_agent may run at the same time; 0 has no limit. */
+  maxAgents: number;
+  /** Sub-issues that the user gave an agent, with the agent's name. */
+  assignments: readonly { identifier: string; label: string }[];
+}
+
+export const ALL_TOOLS: PromptTools = { enabled: true, allowEdits: true, maxAgents: 0, assignments: [] };
+
+const limitLine = (max: number) =>
+  `- Run at most ${max} of these agents at the same time. start_agent refuses more until one of them finishes.`;
+
 /** The instructions each guidance option adds, in prompt order. */
-export function guidanceSections(issue: IssueDetail, guidance: Guidance): string[] {
+export function guidanceSections(issue: IssueDetail, guidance: Guidance, tools: PromptTools = ALL_TOOLS): string[] {
   const sections: string[] = [];
   const example = issue.children[0]?.identifier ?? issue.identifier;
+  const edits = tools.enabled && tools.allowEdits;
   if (guidance.updateLinear) {
-    sections.push(
-      [
-        "Keep Linear current while you work:",
-        `- Start each todo with the issue key it is for, such as "${example}: add the form".`,
-        "- Mark a todo in progress when you start it and completed when it is done. Linear Live moves the issue from these todos.",
+    const lines = [
+      "Keep Linear current while you work:",
+      `- Start each todo with the issue key it is for, such as "${example}: add the form".`,
+      "- Mark a todo in progress when you start it and completed when it is done. Linear Live moves the issue from these todos.",
+    ];
+    if (edits) {
+      lines.push(
         `- Use the ${TOOLS_SERVER} MCP tools: read_issue shows an issue, and edit_issue changes its description.`,
         "- When you finish a task list item in a description, check it off: replace `- [ ] item` with `- [x] item`.",
         "- When the plan changes, update the description. Do not post comments.",
-      ].join("\n"),
-    );
+      );
+    } else if (tools.enabled) {
+      lines.push(`- Use the ${TOOLS_SERVER} MCP tool read_issue to read an issue. Do not change descriptions or post comments.`);
+    } else lines.push("- Do not change the issue or post comments.");
+    sections.push(lines.join("\n"));
   }
   if (guidance.subagentKeys) {
     sections.push(
@@ -142,16 +167,35 @@ export function guidanceSections(issue: IssueDetail, guidance: Guidance): string
       ].join("\n"),
     );
   }
-  if (guidance.paseoSubagents) {
+  // Handing off work needs start_agent, so without the tools these sections are left out.
+  const handOff = tools.enabled && guidance.paseoSubagents;
+  const assigned = tools.enabled ? tools.assignments : [];
+  if (handOff) {
     sections.push(
       [
         "Hand off work to Paseo agents, not to your built-in subagent tool:",
-        `- Start each one with the ${TOOLS_SERVER} start_agent tool, one agent for each sub-issue. It runs on your provider and model.`,
+        `- Start each one with the ${TOOLS_SERVER} start_agent tool, one agent for each sub-issue. It runs on your provider and model${assigned.length > 0 ? ", or on the agent the user chose for the sub-issue" : ""}.`,
         "- Set its thinking to fit the task: low for search and reading, medium for routine edits, high for design, debugging, and review.",
         `- Start its title with the issue key, such as "${example}: write the tests". Give the full task in its prompt, because it does not see your conversation.`,
         "- Call wait_agent for each agent and read its result before you continue.",
+        ...(tools.maxAgents > 0 ? [limitLine(tools.maxAgents)] : []),
       ].join("\n"),
     );
+  }
+  if (assigned.length > 0) {
+    const lines = [
+      `The user chose an agent for these sub-issues. Start one agent for each of them with the ${TOOLS_SERVER} start_agent tool. The plugin runs it on the chosen agent. Do not do this work yourself.`,
+      ...assigned.map((entry) => `- ${entry.identifier}: ${entry.label}`),
+    ];
+    if (!handOff) {
+      lines.push(
+        "For each of these agents:",
+        `- Start its title with the issue key, such as "${assigned[0]?.identifier}: write the tests". Give the full task in its prompt, because it does not see your conversation.`,
+        "- Call wait_agent for each agent and read its result before you continue.",
+        ...(tools.maxAgents > 0 ? [limitLine(tools.maxAgents)] : []),
+      );
+    }
+    sections.push(lines.join("\n"));
   }
   return sections;
 }
@@ -182,7 +226,7 @@ export function composePrompt(input: ComposePromptInput): string {
     );
   }
   const guidance = input.guidance ?? project?.guidance;
-  if (guidance) sections.push(...guidanceSections(issue, guidance));
+  if (guidance) sections.push(...guidanceSections(issue, guidance, input.tools));
   const extra = input.extraInstructions.trim();
   if (extra) sections.push(`Additional instructions:\n${extra}`);
   return sections.join("\n\n");

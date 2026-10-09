@@ -28,7 +28,7 @@ import {
 } from "./settings-fields";
 import type { Theme } from "./ui";
 
-const ISOLATION_OPTIONS: readonly { label: string; value: Isolation }[] = [
+export const ISOLATION_OPTIONS: readonly { label: string; value: Isolation }[] = [
   { label: "New worktree on the issue branch", value: "worktree" },
   { label: "The project or current workspace", value: "workspace" },
 ];
@@ -89,11 +89,11 @@ function LaunchDefaults({ launch, edit }: { launch: Launch; edit: Edit }) {
     ? launch.provider
     : AUTO_MODEL;
   return (
-    <SettingsSection title="Agent defaults">
+    <SettingsSection title="Agent defaults for all projects">
       <SettingsCard>
         <SettingsSelect
           label="Model"
-          hint="Preselected when you start an agent from an issue."
+          hint="Preselected when you start an agent from an issue. A project can use its own defaults in Linear settings, under Projects."
           value={model}
           options={modelOptions}
           onValueChange={chooseModel}

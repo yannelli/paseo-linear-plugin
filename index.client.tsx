@@ -5,6 +5,7 @@ import { gateAgentPanel } from "./client/access";
 import { LivePanel } from "./client/live-panel";
 import { contributeComposerPills } from "./client/pill";
 import { onMenuIconChange, PluginIcon, startMenuIcon } from "./client/plugin-icon";
+import { AgentSettings } from "./client/settings-agents";
 import { ConnectionSettings } from "./client/settings-connection";
 import { IconSettingsScreen } from "./client/settings-icon";
 import { LiveSettings } from "./client/settings-live";
@@ -101,7 +102,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         id: "settings",
         title: "Linear: Settings",
         icon: "Settings",
-        keywords: ["linear", "api key", "prompts", "projects"],
+        keywords: ["linear", "api key", "prompts", "projects", "agents", "mcp", "tools"],
         context: "global",
         onSelect({ openSettings }) {
           openSettings("connection");
@@ -165,6 +166,12 @@ export default function contribute(client: PluginClientContext) {
     title: "Prompts",
     icon: "MessageSquare",
     Component: PromptSettings,
+  });
+  client.addSettingsScreen({
+    id: "agents",
+    title: "Agents",
+    icon: "Bot",
+    Component: AgentSettings,
   });
   client.addSettingsScreen({
     id: "live",

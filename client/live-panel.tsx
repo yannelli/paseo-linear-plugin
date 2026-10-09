@@ -6,23 +6,14 @@ import { type LayoutChangeEvent, Text, View } from "react-native";
 import { deriveActivity } from "../shared/activity";
 import type { IssueDetail } from "../shared/linear";
 import { AGENT_LABELS } from "../shared/prompts";
-import { type GraphCamera, type LinearSettings, type LiveView, linearSettings, type MappingMode } from "../shared/settings";
+import { type LinearSettings, linearSettings, type MappingMode } from "../shared/settings";
 import { KeyScopeProvider } from "./key-scope";
-import { buildGraph, graphFiles } from "../shared/graph-model";
-import { AgentsList, cursorAgents, useLiveAgents } from "./live-agents";
+import { AgentsList, useLiveAgents } from "./live-agents";
 import { ActivityFeed } from "./live-feed";
-import { LiveGraph } from "./live-graph";
-import { LiveHeader, MapActions, MapSource, ViewToggle } from "./live-header";
+import { LiveHeader, MapActions, MapSource } from "./live-header";
 import { type FocusKey, IssueRail, issueProgress, SubIssues } from "./live-issues";
 import { MapLegend, RepoMap } from "./live-map";
-import {
-  ownerColors,
-  useAgentTimeline,
-  useFileLinks,
-  useLiveMap,
-  useMapModel,
-  useReduceMotion,
-} from "./live-timeline";
+import { ownerColors, useAgentTimeline, useLiveMap, useMapModel, useReduceMotion } from "./live-timeline";
 import { hitRateLine, offMapLine, offMapWhere } from "../shared/map-model";
 import { useIssue } from "./queries";
 import { Button, EmptyState, errorMessage, IconButton, type Theme } from "./ui";
@@ -47,9 +38,7 @@ const selectAgent = (agent: PluginAgentSnapshot): AgentInfo => ({
   provider: agent.provider,
 });
 
-export type LivePatch = Partial<
-  Pick<LinearSettings["live"], "view" | "issuesCollapsed" | "graphCamera" | "graphLocked">
->;
+type LivePatch = Partial<Pick<LinearSettings["live"], "issuesCollapsed">>;
 
 const STACK_WIDTH = 760;
 const COLUMN_WIDTH = 330;
@@ -105,10 +94,7 @@ export function LivePanel(props: PluginAgentPanelProps) {
         agent={agent}
         identifier={agent.identifier}
         mapping={live?.mapping ?? "semantic"}
-        view={live?.view ?? "map"}
         issuesCollapsed={live?.issuesCollapsed ?? false}
-        graphCamera={live?.graphCamera ?? "auto"}
-        graphLocked={live?.graphLocked ?? false}
         saveLive={saveLive}
         openAgent={props.navigation ? (id) => props.navigation?.openAgent({ agentId: id }) : undefined}
       />
@@ -123,10 +109,7 @@ interface BodyProps {
   agent: AgentInfo;
   identifier: string;
   mapping: MappingMode;
-  view: LiveView;
   issuesCollapsed: boolean;
-  graphCamera: GraphCamera;
-  graphLocked: boolean;
   saveLive(patch: LivePatch): void;
   openAgent?: (agentId: string) => void;
 }
@@ -226,52 +209,12 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
   // Hold the map until its first full data, so it does not draw once and then swap.
   const mapShown = useRef(false);
   if (liveMap.ready && model.ready) mapShown.current = true;
-  const [view, setView] = useState<LiveView>(props.view);
   const [collapsed, setCollapsed] = useState(props.issuesCollapsed);
   const { saveLive } = props;
-  const chooseView = useCallback(
-    (next: LiveView) => {
-      setView(next);
-      saveLive({ view: next });
-    },
-    [saveLive],
-  );
   const toggleIssues = useCallback(() => {
     setCollapsed(!collapsed);
     saveLive({ issuesCollapsed: !collapsed });
   }, [collapsed, saveLive]);
-  const working = agent.status === "running";
-  const graphInput = useMemo(
-    () => ({
-      issue: issue.identifier,
-      children: issue.children.map((child) => child.identifier),
-      tiles: model.zones.flatMap((zone) => zone.tiles),
-    }),
-    [issue, model.zones],
-  );
-  const graphPaths = useMemo(
-    () => (view === "graph" ? graphFiles(graphInput).tiles.map((tile) => tile.path) : []),
-    [view, graphInput],
-  );
-  // Each edit can add or drop an import, so the links are read again.
-  const edits = graphInput.tiles.reduce((sum, tile) => sum + tile.added + tile.removed, 0);
-  const links = useFileLinks(agentId, graphPaths, edits, view === "graph");
-  const graph = useMemo(
-    () => (view === "graph" ? buildGraph({ ...graphInput, links: links.links }) : null),
-    [view, graphInput, links.links],
-  );
-  const cursors = useMemo(
-    () =>
-      cursorAgents({
-        theme,
-        provider: agent.provider,
-        working,
-        activity,
-        children: agents.children,
-        subagents: agents.subagents,
-      }),
-    [theme, agent.provider, working, activity, agents.children, agents.subagents],
-  );
   const owners = useMemo(() => ownerColors(issue, colors.accent), [issue, colors.accent]);
   const progress = useMemo(() => issueProgress(issue, activity.todos), [issue, activity.todos]);
   const reduceMotion = useReduceMotion();
@@ -335,17 +278,15 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
       reduceMotion={reduceMotion}
     />
   );
-  const toggle = <ViewToggle theme={theme} value={view} onChange={chooseView} />;
   const map = (
     <Card
       theme={theme}
-      title={view === "graph" ? "Graph" : "Repository map"}
+      title="Repository map"
       meta={mapShown.current ? <MapSource theme={theme} live={liveMap} mapping={props.mapping} /> : null}
       right={
         <View style={styles.tools}>
-          {stacked || view === "graph" ? null : <MapLegend theme={theme} />}
+          {stacked ? null : <MapLegend theme={theme} />}
           <MapActions theme={theme} live={liveMap} />
-          {toggle}
         </View>
       }
     >
@@ -354,29 +295,9 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
           <Text style={styles.hit}>Loading map…</Text>
         </View>
       ) : (
-      <View style={styles.mapHead}>
-        <Text style={styles.hit}>{hitRateLine(model)}</Text>
-        {offMap ? <Text style={styles.off}>{offMap}</Text> : null}
-        {graph ? (
-          <LiveGraph
-            theme={theme}
-            compact={stacked}
-            full={collapsed && !stacked}
-            graph={graph}
-            ready={links.ready}
-            issue={issue}
-            progress={progress}
-            owners={owners}
-            agents={cursors}
-            areas={liveMap.areas}
-            focus={focus}
-            onFocus={toggleFocus}
-            camera={props.graphCamera}
-            locked={props.graphLocked}
-            saveLive={saveLive}
-            reduceMotion={reduceMotion}
-          />
-        ) : (
+        <View style={styles.mapHead}>
+          <Text style={styles.hit}>{hitRateLine(model)}</Text>
+          {offMap ? <Text style={styles.off}>{offMap}</Text> : null}
           <RepoMap
             theme={theme}
             compact={stacked}
@@ -386,8 +307,7 @@ function LiveView(props: BodyProps & { issue: IssueDetail }) {
             markers={agents.markers}
             reduceMotion={reduceMotion}
           />
-        )}
-      </View>
+        </View>
       )}
     </Card>
   );

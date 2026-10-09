@@ -1,6 +1,6 @@
 import { displayCommand, shellActivity } from "./shell-activity";
 import { isSubagentCall, mergeSubagent, type SubagentRun, subagentOf } from "./subagents";
-import { type TodoLike, todoKey, todoStatus } from "./todo-sync";
+import type { TodoLike } from "./todo-sync";
 
 // Structural view of Paseo timeline items, so shared code needs no protocol import.
 export interface TimelineItemLike {
@@ -47,11 +47,7 @@ export interface DirTouch {
   order: number;
 }
 
-/** What the agent works on now: a file, or an issue whose todo it just started. */
-export type AgentFocus = { kind: "file"; path: string } | { kind: "issue"; key: string };
-
 export interface Activity {
-  focus: AgentFocus | null;
   files: FileTouch[];
   dirs: DirTouch[];
   /** Subagents started inside the provider, in launch order. */
@@ -116,37 +112,13 @@ function baseName(path: string): string {
 function latestToolCalls(items: readonly TimelineItemLike[]) {
   const order: string[] = [];
   const byId = new Map<string, TimelineItemLike>();
-  const started = new Map<string, number>();
   items.forEach((item, index) => {
     if (item.type !== "tool_call") return;
     const id = text(item.callId) ?? `index-${index}`;
-    if (!byId.has(id)) {
-      order.push(id);
-      started.set(id, index);
-    }
+    if (!byId.has(id)) order.push(id);
     byId.set(id, item);
   });
-  return order.map((id) => ({ id, item: byId.get(id) as TimelineItemLike, start: started.get(id) ?? 0 }));
-}
-
-interface FocusMark {
-  path: string;
-  /** Index of the item where the call started. */
-  at: number;
-}
-
-// The newest point at which the in-progress todo moved to another issue key.
-function todoFocus(items: readonly TimelineItemLike[]): { key: string; at: number } | null {
-  let focus: { key: string; at: number } | null = null;
-  let active: string | null = null;
-  items.forEach((item, index) => {
-    if (item.type !== "todo" || !Array.isArray(item.items)) return;
-    const doing = (item.items as TodoLike[]).find((todo) => todoStatus(todo) === "in_progress");
-    const key = doing ? todoKey(doing.text) : null;
-    if (key && key !== active) focus = { key, at: index };
-    active = key;
-  });
-  return focus;
+  return order.map((id) => ({ id, item: byId.get(id) as TimelineItemLike }));
 }
 
 export function deriveActivity(items: readonly TimelineItemLike[], cwd: string): Activity {
@@ -177,9 +149,7 @@ export function deriveActivity(items: readonly TimelineItemLike[], cwd: string):
     return entry;
   };
 
-  let fileFocus: FocusMark | null = null;
-  let runningFocus: FocusMark | null = null;
-  latestToolCalls(items).forEach(({ id, item, start }, order) => {
+  latestToolCalls(items).forEach(({ id, item }, order) => {
     if (HIDDEN_TOOLS.test(text(item.name) ?? "")) return;
     const signal = subagentOf(item, resolve);
     if (!signal && isSubagentCall(item)) return;
@@ -282,26 +252,12 @@ export function deriveActivity(items: readonly TimelineItemLike[], cwd: string):
         dirs.set(dir.path, { path: dir.path, deep: dir.deep || (known?.deep ?? false), order });
       }
     }
-    const lead = event.path ?? event.paths[0];
-    if (lead && (event.kind === "read" || event.kind === "edit" || event.kind === "write")) {
-      if (!fileFocus || start >= fileFocus.at) fileFocus = { path: lead, at: start };
-      if (status === "running" && (!runningFocus || start >= runningFocus.at)) runningFocus = { path: lead, at: start };
-    }
     events.push(event);
   });
 
   const recent = events.slice(-MAX_EVENTS).reverse();
   const current = recent.find((event) => event.status === "running") ?? recent[0] ?? null;
-  // A running call wins; otherwise the newer of the last file and the last todo change.
-  const issueFocus = todoFocus(items);
-  const lastFile = fileFocus as FocusMark | null;
-  const running = runningFocus as FocusMark | null;
-  let focus: AgentFocus | null = null;
-  if (running) focus = { kind: "file", path: running.path };
-  else if (issueFocus && (!lastFile || issueFocus.at > lastFile.at)) focus = { kind: "issue", key: issueFocus.key };
-  else if (lastFile) focus = { kind: "file", path: lastFile.path };
   return {
-    focus,
     files: [...files.values()].sort((a, b) => b.order - a.order),
     dirs: [...dirs.values()],
     subagents: [...subagents.values()],

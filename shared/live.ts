@@ -47,7 +47,7 @@ export const InitProposalSchema = z.object({
 });
 export type InitProposal = z.infer<typeof InitProposalSchema>;
 
-/** Files an explore run may list; the map and the graph show this many and more. */
+/** Files an explore run may list; the map shows this many and more. */
 export const MAX_EXPLORE_FILES = 150;
 export const MAX_LIST_DIRS = 40;
 export const MAX_DIR_ENTRIES = 60;
@@ -57,17 +57,6 @@ export const listFilesRpc = defineRpc({
   input: z.object({ agentId: z.string().min(1), dirs: z.array(z.string()).max(MAX_LIST_DIRS) }),
   output: z.object({
     dirs: z.array(z.object({ dir: z.string(), files: z.array(z.string()), truncated: z.boolean() })),
-  }),
-});
-
-export const MAX_LINK_FILES = 200;
-
-/** Imports and other links between the files on the graph. */
-export const linksRpc = defineRpc({
-  name: "linear.live.links",
-  input: z.object({ agentId: z.string().min(1), files: z.array(z.string().min(1)).max(MAX_LINK_FILES) }),
-  output: z.object({
-    links: z.array(z.object({ from: z.string(), to: z.string(), kind: z.enum(["import", "link", "mention"]) })),
   }),
 });
 

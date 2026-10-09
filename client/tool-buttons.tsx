@@ -3,8 +3,8 @@ import { type ReactNode, useMemo } from "react";
 import { ActivityIndicator, Pressable, View } from "react-native";
 import { type Theme, usePressableStyle } from "./ui";
 
-// Small icon buttons for card toolbars: map actions and the graph's camera. A group draws them
-// in one bordered track, like the Map and Graph switch.
+// Small icon buttons for card toolbars, such as the map actions. A group draws them in one
+// bordered track.
 
 export function ToolGroup({ theme, children }: { theme: Theme; children: ReactNode }) {
   const { colors } = theme;
