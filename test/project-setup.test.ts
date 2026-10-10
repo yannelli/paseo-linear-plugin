@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -32,6 +33,17 @@ describe("read-only commands", () => {
     "git grep -n 'Once' -- src",
     "rg -n -e Lazy src",
     "grep -rn 'a b' .",
+    'rg -n "/api" src',
+    'rg "/usr/bin/env" .',
+    "grep -rn '/tmp' src",
+    'git grep -n "/etc/hosts"',
+    "rg -e /usr/bin/env src",
+    "rg -ie/usr/bin/env src",
+    "rg -A 3 -g '*.ts' /usr/bin/env src",
+    "rg -n -- /etc/passwd src",
+    'rg -e "-Lazy" src',
+    "ls src/*.ts",
+    "rg -f../nothing/here x .",
   ])("allows %s", (command) => {
     expect(readOnlyCommand(command, CWD)).toBe(true);
   });
@@ -68,14 +80,20 @@ describe("read-only commands", () => {
     "grep --deref -n x .",
     "ls --deref link",
     "tail -f log.txt",
-    "find * -name x",
-    "ls src/*",
-    "cat a?.ts",
     "rg x | | head",
+    "rg -e x /usr/bin/env",
+    "grep -r /usr/bin/env /etc",
+    "rg --files /etc",
+    "rg -f /etc/passwd x",
+    "rg -g -e /etc/passwd -e foo .",
+    "rg --glob '*.ts' -e x /etc",
+    "grep --incl '*.ts' /usr/bin/env /etc",
+    "cat =ls",
+    "ls ^a",
     "rg -f/etc/passwd .",
     "grep -nf/etc/passwd -r .",
     "git grep -f/etc/passwd",
-    "rg -f../secret .",
+    "rg -f../../../../../../../../etc/passwd .",
     "find -files0-from src/list -printf '%p'",
     "wc --files0-from=src/list",
     "git grep x -- ':/'",
@@ -132,8 +150,36 @@ describe("links out of the folder", () => {
       expect(grep({ pattern: "x", path: "src" }).behavior).toBe("allow");
       expect(grep({ pattern: "x", path: "/etc" }).behavior).toBe("deny");
       expect(grep({ pattern: "x", path: "escape" }).behavior).toBe("deny");
+      await mkdir(path.join(root, ".github", "workflows"), { recursive: true });
+      await writeFile(path.join(root, ".github", "workflows", "ci.yml"), "");
+      for (const command of ["ls src/*.ts", "cat src/*", "cat .github/workflows/*.yml", "ls **/*.ts", "rg '/etc' src/*"]) {
+        expect(readOnlyCommand(command, root)).toBe(true);
+      }
+      // The kernel follows a link before the ".." after it, so these leave the folder.
+      expect(read(`${root}/escape/../home/id_rsa`).behavior).toBe("deny");
+      expect(readOnlyCommand("cat src/../src/a.ts", root)).toBe(true);
+      if (existsSync("/proc/self/root")) expect(readOnlyCommand("cat /proc/self/root/../etc/hostname", root)).toBe(false);
+      for (const command of ["cat *", "ls */", "cat ***/id_rsa", "cat .*", "head e*/*", "cat escape/../home/id_rsa", "cat escape/../home/*"]) {
+        expect(readOnlyCommand(command, root)).toBe(false);
+      }
     } finally {
       await rm(base, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("wildcards", () => {
+  it("checks each match as a flag, so a file named like a flag cannot become one", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "linear-wildcards-"));
+    try {
+      await writeFile(path.join(root, "-delete"), "");
+      await writeFile(path.join(root, "a.txt"), "");
+      expect(readOnlyCommand("find * -name x", root)).toBe(false);
+      expect(readOnlyCommand("cat *.txt", root)).toBe(true);
+      expect(readOnlyCommand("cat 'a'*", root)).toBe(true);
+      expect(readOnlyCommand("cat '*'", root)).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

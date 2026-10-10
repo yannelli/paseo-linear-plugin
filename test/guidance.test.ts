@@ -112,6 +112,16 @@ describe("Claude hooks", () => {
     expect(execFileSync("sh", ["-c", `printf '%s' ${shellQuote("a'b $HOME `x`")}`], { encoding: "utf8" })).toBe("a'b $HOME `x`");
   });
 
+  it("lists up to 150 sub-issues and counts the rest, through a real shell", () => {
+    const children = Array.from({ length: 200 }, (_, n) => ({ identifier: `ENG-${n + 2}`, title: `Part ${n + 2}` }));
+    const hooks = claudeHooks({ ...hookIssue, children }, ALL)?.hooks as Record<string, { hooks: { command: string }[] }[]>;
+    const command = hooks.SessionStart?.[0]?.hooks[0]?.command ?? "";
+    const context = JSON.parse(execFileSync("sh", ["-c", command], { encoding: "utf8" })).hookSpecificOutput.additionalContext;
+    expect(context).toContain("- ENG-151: Part 151");
+    expect(context).not.toContain("ENG-152:");
+    expect(context).toContain("- 50 more sub-issues. Read ENG-1 for the full list.");
+  });
+
   it("writes a plugin folder the launch passes with --plugin-dir", async () => {
     const data = await mkdtemp(path.join(tmpdir(), "linear-hooks-"));
     const handlers = new Map<string, (input: unknown) => Promise<{ pluginDir: string | null }>>();

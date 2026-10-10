@@ -326,6 +326,40 @@ describe("issue filters", () => {
     expect(queries).toEqual(["detail:ENG-123"]);
     expect(result.issues.map((entry) => entry.identifier)).toEqual(["ENG-123"]);
   });
+
+  it("loads every page of sub-issues", async () => {
+    const child = (n: number) => ({ id: `c${n}`, identifier: `ENG-${n}`, title: `Part ${n}`, state });
+    const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => child(from + i));
+    const pages: (string | undefined)[] = [];
+    const service = createLinearService(async (query, variables) => {
+      if (query.includes("PaseoLinearIssueChildren")) {
+        pages.push(String(variables?.after));
+        const second = variables?.after === "p1";
+        return {
+          issue: {
+            children: {
+              nodes: second ? range(150, 250) : range(250, 270),
+              pageInfo: { hasNextPage: second, endCursor: second ? "p2" : null },
+            },
+          },
+        };
+      }
+      return {
+        issue: {
+          ...detail,
+          ancestors: null,
+          labels: { nodes: [] },
+          children: { nodes: range(100, 150), pageInfo: { hasNextPage: true, endCursor: "p1" } },
+          comments: { nodes: [] },
+          attachments: { nodes: [] },
+        },
+      };
+    });
+    const issue = await service.getIssue("ENG-123");
+    expect(pages).toEqual(["p1", "p2"]);
+    expect(issue.children).toHaveLength(170);
+    expect(issue.children.at(-1)?.identifier).toBe("ENG-269");
+  });
 });
 
 describe("Linear GraphQL transport", () => {

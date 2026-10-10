@@ -67,6 +67,8 @@ export const LIST_QUERY = `
   }
 `;
 
+const CHILD_FIELDS = `nodes { id identifier title state { ${STATE_FIELDS} } } pageInfo { hasNextPage endCursor }`;
+
 export const DETAIL_QUERY = `
   query PaseoLinearIssueDetail($id: String!) {
     issue(id: $id) {
@@ -74,12 +76,21 @@ export const DETAIL_QUERY = `
       description createdAt
       creator { ${USER_FIELDS} }
       ancestors: ${ANCESTOR_FIELDS}
-      children(first: 50) { nodes { id identifier title state { ${STATE_FIELDS} } } }
+      children(first: 50) { ${CHILD_FIELDS} }
       comments(first: 100) { nodes { id body createdAt user { ${USER_FIELDS} } } }
       attachments(first: 25) { nodes { id title subtitle url sourceType } }
     }
   }
 `;
+
+/** The next page of sub-issues, for issues with more than the detail query loads. */
+export const CHILDREN_QUERY = `
+  query PaseoLinearIssueChildren($id: String!, $after: String) {
+    issue(id: $id) { children(first: 100, after: $after) { ${CHILD_FIELDS} } }
+  }
+`;
+/** Pages after the first: up to 5,050 sub-issues in all. */
+const MAX_CHILD_PAGES = 50;
 
 export const UPDATE_MUTATION = `
   mutation PaseoLinearIssueUpdate($id: String!, $input: IssueUpdateInput!) {
@@ -129,12 +140,9 @@ const RawComment = z.object({
   createdAt: z.string(),
   user: UserSchema.nullable(),
 });
-const RawDetail = RawSummary.extend({
-  description: z.string().nullable(),
-  createdAt: z.string(),
-  creator: UserSchema.nullable(),
-  ancestors: RawAncestorSchema.nullable(),
-  children: nodes(
+const PageInfo = z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullable() });
+const RawChildren = z.object({
+  nodes: z.array(
     z.object({
       id: z.string(),
       identifier: z.string(),
@@ -142,6 +150,14 @@ const RawDetail = RawSummary.extend({
       state: WorkflowStateSchema,
     }),
   ),
+  pageInfo: PageInfo.optional(),
+});
+const RawDetail = RawSummary.extend({
+  description: z.string().nullable(),
+  createdAt: z.string(),
+  creator: UserSchema.nullable(),
+  ancestors: RawAncestorSchema.nullable(),
+  children: RawChildren,
   comments: nodes(RawComment),
   attachments: nodes(
     z.object({
@@ -214,7 +230,23 @@ export function createLinearService(graphql: LinearGraphql) {
     const comments = [...data.issue.comments].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
-    return { ...data.issue, ancestors: flattenAncestors(data.issue.ancestors), comments };
+    const children = await allChildren(data.issue.id, data.issue.children);
+    return { ...data.issue, ancestors: flattenAncestors(data.issue.ancestors), comments, children };
+  }
+
+  // Loads the remaining pages, so the tools, todo sync, and the launch page see every sub-issue.
+  async function allChildren(id: string, first: z.infer<typeof RawChildren>) {
+    const children = [...first.nodes];
+    let page = first.pageInfo;
+    for (let count = 0; page?.hasNextPage && page.endCursor && count < MAX_CHILD_PAGES; count += 1) {
+      const next = z
+        .object({ issue: z.object({ children: RawChildren }).nullable() })
+        .parse(await graphql(CHILDREN_QUERY, { id, after: page.endCursor }));
+      if (!next.issue) break;
+      children.push(...next.issue.children.nodes);
+      page = next.issue.children.pageInfo;
+    }
+    return children;
   }
 
   function requireIssue(payload: z.infer<typeof IssuePayload>, action: string): IssueSummary {
