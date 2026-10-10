@@ -1,15 +1,17 @@
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   createJobStore,
   lastJsonObject,
   type PermissionRequest,
-  readOnlyAnswer,
-  readOnlyCommand,
   safeModeId,
   strictJsonSchema,
   waitUntilIdle,
 } from "../server/agent-runs";
 import { initPrompt } from "../server/init";
+import { readOnlyAnswer, readOnlyCommand } from "../server/read-only";
 import { applyProposal, InitProposalSchema, proposalDiffs } from "../shared/project-setup";
 import { isInternalAgent } from "../shared/prompts";
 import { emptyProjectConfig } from "../shared/settings";
@@ -25,6 +27,11 @@ describe("read-only commands", () => {
     "ls /repo",
     "git ls-files | grep layout",
     'rg "a|b" src',
+    'rg -n "foo\\.bar" src',
+    "find src -name '*.ts' -type f",
+    "git grep -n 'Once' -- src",
+    "rg -n -e Lazy src",
+    "grep -rn 'a b' .",
   ])("allows %s", (command) => {
     expect(readOnlyCommand(command, CWD)).toBe(true);
   });
@@ -47,6 +54,32 @@ describe("read-only commands", () => {
     "git commit -m x",
     "FOO=1 rg x",
     "cat ~/secret",
+    "find . '-exec' sh -c 'id' ';'",
+    "find . -e\\xec id +",
+    'find . "-delete"',
+    "find . -fprintf out x",
+    'rg "--pre" ./evil.sh x',
+    "rg --pre=./evil.sh x",
+    "rg --hostname-bin=./evil.sh --hyperlink-format=default x",
+    "rg -nL x",
+    'git grep "-O" sh x',
+    "git grep -Osh -l x",
+    "git grep --open-files sh x",
+    "grep --deref -n x .",
+    "ls --deref link",
+    "tail -f log.txt",
+    "find * -name x",
+    "ls src/*",
+    "cat a?.ts",
+    "rg x | | head",
+    "rg -f/etc/passwd .",
+    "grep -nf/etc/passwd -r .",
+    "git grep -f/etc/passwd",
+    "rg -f../secret .",
+    "find -files0-from src/list -printf '%p'",
+    "wc --files0-from=src/list",
+    "git grep x -- ':/'",
+    "git ls-files :/",
   ])("denies %s", (command) => {
     expect(readOnlyCommand(command, CWD)).toBe(false);
   });
@@ -65,8 +98,42 @@ describe("read-only commands", () => {
       request({ detail: { type: "search", query: "x", toolName: "web_search" } }),
       request({ kind: "question" }),
       request({ kind: "plan" }),
+      request({ input: { command: "ls", workdir: "/etc" }, detail: { type: "shell", command: "ls" } }),
+      request({ input: { command: "ls" }, detail: { type: "mcp", server: "paseo", tool: "create_terminal" } } as never),
     ]) {
       expect(readOnlyAnswer(denied, CWD).behavior).toBe("deny");
+    }
+  });
+});
+
+describe("links out of the folder", () => {
+  it("denies reads and commands that reach outside through a link", async () => {
+    const base = await mkdtemp(path.join(tmpdir(), "linear-read-only-"));
+    try {
+      const root = path.join(base, "repo");
+      const outside = path.join(base, "home");
+      await mkdir(path.join(root, "src"), { recursive: true });
+      await mkdir(outside);
+      await writeFile(path.join(root, "src", "a.ts"), "");
+      await writeFile(path.join(outside, "id_rsa"), "");
+      await symlink(outside, path.join(root, "escape"));
+      await symlink(path.join(outside, "id_rsa"), path.join(root, "key"));
+      expect(readOnlyCommand("cat src/a.ts", root)).toBe(true);
+      expect(readOnlyCommand("ls src", root)).toBe(true);
+      for (const command of ["cat key", "cat escape/id_rsa", "ls escape/", "rg x escape", "rg -fkey .", "head --lines=1 key"]) {
+        expect(readOnlyCommand(command, root)).toBe(false);
+      }
+      const read = (filePath: string) =>
+        readOnlyAnswer({ id: "p", provider: "claude", name: "Read", kind: "tool", detail: { type: "read", filePath } } as PermissionRequest, root);
+      expect(read(path.join(root, "src", "a.ts")).behavior).toBe("allow");
+      expect(read(path.join(root, "key")).behavior).toBe("deny");
+      const grep = (input: Record<string, unknown>) =>
+        readOnlyAnswer({ id: "p", provider: "claude", name: "Grep", kind: "tool", input, detail: { type: "search", query: "x", toolName: "grep" } } as PermissionRequest, root);
+      expect(grep({ pattern: "x", path: "src" }).behavior).toBe("allow");
+      expect(grep({ pattern: "x", path: "/etc" }).behavior).toBe("deny");
+      expect(grep({ pattern: "x", path: "escape" }).behavior).toBe("deny");
+    } finally {
+      await rm(base, { recursive: true, force: true });
     }
   });
 });

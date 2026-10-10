@@ -136,7 +136,10 @@ describe("Linear tools", () => {
       getIssue: async (id: string) => issues.get(id) as IssueDetail,
       updateIssue: async (id: string, patch: { description?: string }) => {
         updates.push({ id, ...patch });
-        return issues.get("ENG-2");
+        const key = id.replace(/^id-/, "");
+        const current = issues.get(key);
+        if (current && patch.description !== undefined) issues.set(key, { ...current, description: patch.description });
+        return issues.get(key);
       },
     } as unknown as LinearService;
     const access: LinearAccess = { connect: async () => ({ linear, fingerprint: "f" }), mutate: (_scope, run) => run(linear) };
@@ -203,6 +206,15 @@ describe("Linear tools", () => {
     );
     expect(updates).toEqual([{ id: "id-ENG-2", description: "- [x] Form\n- [ ] Tests" }]);
     await expect(call("read_issue", { issue: "ENG-9" })).rejects.toThrow("not ENG-1 or one of its sub-issues");
+  });
+
+  it("runs edits of one issue one at a time, so none is lost", async () => {
+    const { call, updates } = setup();
+    await Promise.all([
+      call("edit_issue", { issue: "ENG-2", old_text: "- [ ] Form", new_text: "- [x] Form" }),
+      call("edit_issue", { issue: "ENG-2", old_text: "- [ ] Tests", new_text: "- [x] Tests" }),
+    ]);
+    expect(updates.at(-1)).toEqual({ id: "id-ENG-2", description: "- [x] Form\n- [x] Tests" });
   });
 
   it("starts a child with its own tools and labels, and waits only for its own children", async () => {

@@ -80,9 +80,10 @@ export function registerSync(server: PluginServerContext, dependencies: SyncDepe
     const previous = queues.get(identifier) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(run);
     queues.set(identifier, next);
-    void next.finally(() => {
+    const forget = () => {
       if (queues.get(identifier) === next) queues.delete(identifier);
-    });
+    };
+    next.then(forget, forget);
     return next;
   }
 

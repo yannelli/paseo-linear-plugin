@@ -79,6 +79,17 @@ async function treeIssue(linear: LinearService, scope: ToolScope, key: string | 
 
 export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mint: Mint): McpTool<Caller>[] {
   const callers = new Map<string, string>();
+  // One edit per issue at a time, so two agents that check off items never undo each other.
+  const edits = new Map<string, Promise<unknown>>();
+  function oneAtATime<T>(key: string, run: () => Promise<T>): Promise<T> {
+    const next = (edits.get(key) ?? Promise.resolve()).catch(() => undefined).then(run);
+    edits.set(key, next);
+    const forget = () => {
+      if (edits.get(key) === next) edits.delete(key);
+    };
+    next.then(forget, forget);
+    return next;
+  }
   async function callerAgent(api: Paseo, grant: Grant): Promise<string | null> {
     const known = callers.get(grant.id);
     if (known) return known;
@@ -114,15 +125,18 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
       input: EditIssueInput,
       allowed: (caller) => caller.tools.allowEdits,
       run(input, grant) {
-        return deps.access.mutate(grant.scope.keyScope, async (linear) => {
-          const issue = await treeIssue(linear, grant.scope, input.issue);
-          const edited = editText(issue.description ?? "", input.old_text, input.new_text);
-          if ("error" in edited) throw new Error(edited.error);
-          await linear.updateIssue(issue.id, { description: edited.body });
-          const tasks = taskCount(edited.body);
-          const count = tasks.total > 0 ? ` ${tasks.done} of ${tasks.total} task list items are checked.` : "";
-          return `Updated the description of ${issue.identifier}.${count}`;
-        });
+        const key = `${grant.scope.keyScope ?? ""}:${(input.issue ?? grant.scope.home).toUpperCase()}`;
+        return oneAtATime(key, () =>
+          deps.access.mutate(grant.scope.keyScope, async (linear) => {
+            const issue = await treeIssue(linear, grant.scope, input.issue);
+            const edited = editText(issue.description ?? "", input.old_text, input.new_text);
+            if ("error" in edited) throw new Error(edited.error);
+            await linear.updateIssue(issue.id, { description: edited.body });
+            const tasks = taskCount(edited.body);
+            const count = tasks.total > 0 ? ` ${tasks.done} of ${tasks.total} task list items are checked.` : "";
+            return `Updated the description of ${issue.identifier}.${count}`;
+          }),
+        );
       },
     }),
     tool({
