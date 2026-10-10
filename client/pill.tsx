@@ -3,24 +3,21 @@ import type {
   PluginButtonRegistration,
   PluginClientContext,
 } from "@getpaseo/plugin/client";
-import { useAgent, usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
+import { useAgent, usePaseo, useRpc, useSettings, useWorkspace } from "@getpaseo/plugin/client";
 import { TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { deriveActivity, type TimelineItemLike } from "../shared/activity";
 import { searchIssuesRpc } from "../shared/issues";
-import { syncNowRpc } from "../shared/live";
 import { AGENT_LABELS, isInternalAgent } from "../shared/prompts";
-import { accessRpc, linearSettings, projectEnabled } from "../shared/settings";
-import { progressByKey } from "../shared/todo-sync";
+import { accessRpc, linearSettings, projectDefaults, projectEnabled } from "../shared/settings";
+import { latestTodos, progressByKey, syncNowRpc } from "../shared/todo-sync";
 import { currentAccess, onAccessChange, publishAccess } from "./access";
 import { KeyScopeProvider } from "./key-scope";
-import { MONO } from "./live-issues";
 import { PluginIcon } from "./plugin-icon";
 import { useIssue } from "./queries";
 import { focusIssue, panelScope } from "./store";
-import { Button, errorMessage, StateIcon, type Theme } from "./ui";
+import { Button, errorMessage, MONO, StateIcon, type Theme } from "./ui";
 
 type Agent = Awaited<
   ReturnType<PluginClientContext["paseo"]["agents"]["list"]>
@@ -32,7 +29,7 @@ const ACCESS_POLL_MS = 60_000;
 const PARENT_LABEL = "paseo.parent-agent-id";
 
 type ContentProps = PluginButtonContentProps & { context: "agent"; agentId: string };
-type Open = (panel: string, workspaceId: string, agentId?: string) => void;
+type OpenIssues = (workspaceId: string) => void;
 
 function asAgentContent(Component: ComponentType<ContentProps>) {
   return function AgentContent(props: PluginButtonContentProps) {
@@ -40,7 +37,7 @@ function asAgentContent(Component: ComponentType<ContentProps>) {
   };
 }
 
-function useTodos(agentId: string, cwd: string) {
+function useTodos(agentId: string) {
   const paseo = usePaseo();
   return useQuery({
     queryKey: ["linear", "pill-todos", agentId],
@@ -48,8 +45,7 @@ function useTodos(agentId: string, cwd: string) {
       const page = await paseo.agents
         .ref(agentId)
         .timeline.refetch({ direction: "tail", limit: 200, projection: "projected" });
-      const items = page.entries.map((entry) => entry.item as unknown as TimelineItemLike);
-      return deriveActivity(items, cwd).todos;
+      return latestTodos(page.entries.map((entry) => entry.item)) ?? [];
     },
     refetchInterval: 5_000,
   });
@@ -74,13 +70,15 @@ function textStyles(theme: Theme, compact: boolean) {
   };
 }
 
-function LinkedIssue(props: ContentProps & { open: Open }) {
-  const { theme, layout, agentId, workspaceId, close, open } = props;
+const selectProjectId = (workspace: { projectId: string }) => workspace.projectId;
+
+function LinkedIssue(props: ContentProps & { openIssues: OpenIssues }) {
+  const { theme, layout, agentId, workspaceId, close, openIssues } = props;
   const identifier = useAgent(agentId, (agent) => agent.labels[AGENT_LABELS.issue] ?? null);
-  const cwd = useAgent(agentId, (agent) => agent.cwd);
+  const projectId = useWorkspace(workspaceId, selectProjectId);
   const settings = useSettings(linearSettings);
   const issue = useIssue(identifier);
-  const todos = useTodos(agentId, cwd ?? "");
+  const todos = useTodos(agentId);
   const sync = useRpc(syncNowRpc);
   const toast = useToast();
   const syncNow = useMutation({
@@ -95,7 +93,7 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
   });
   const styles = useMemo(() => textStyles(theme, layout.compact), [theme, layout.compact]);
   const progress = useMemo(() => progressByKey(todos.data ?? []), [todos.data]);
-  const live = settings.status === "ready" && settings.values.live;
+  const syncTodos = settings.status === "ready" && projectDefaults(settings.values, projectId).syncTodos;
   if (!identifier) return null;
   const data = issue.data;
   return (
@@ -109,18 +107,6 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
       </View>
       {issue.isError ? <Text style={styles.danger}>{errorMessage(issue.error)}</Text> : null}
       <View style={styles.actions}>
-        {live && live.enabled ? (
-          <Button
-            theme={theme}
-            size="xs"
-            icon="Radar"
-            label="Open Linear Live"
-            onPress={() => {
-              close();
-              open("live", workspaceId, agentId);
-            }}
-          />
-        ) : null}
         <Button
           theme={theme}
           size="xs"
@@ -129,10 +115,10 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
           onPress={() => {
             focusIssue(panelScope(workspaceId), identifier);
             close();
-            open("issues", workspaceId);
+            openIssues(workspaceId);
           }}
         />
-        {live && live.syncTodos ? (
+        {syncTodos ? (
           <Button
             theme={theme}
             size="xs"
@@ -171,7 +157,7 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
   );
 }
 
-function LinkedIssueScoped(props: ContentProps & { open: Open }) {
+function LinkedIssueScoped(props: ContentProps & { openIssues: OpenIssues }) {
   const project = useAgent(props.agentId, (agent) => agent.labels[AGENT_LABELS.project] ?? null);
   return (
     <KeyScopeProvider projectId={project}>
@@ -276,9 +262,8 @@ export function contributeComposerPills(client: PluginClientContext) {
     { registration: PluginButtonRegistration; identifier: string | null }
   >();
   const lifetime = new AbortController();
-  const open: Open = (panel, workspaceId, agentId) =>
-    client.openPanel(panel, agentId ? { workspaceId, agentId } : { workspaceId });
-  const Linked = asAgentContent((props) => <LinkedIssueScoped {...props} open={open} />);
+  const openIssues: OpenIssues = (workspaceId) => client.openPanel("issues", { workspaceId });
+  const Linked = asAgentContent((props) => <LinkedIssueScoped {...props} openIssues={openIssues} />);
   const Search = asAgentContent(SendIssue);
 
   const agents = new Map<string, Agent>();

@@ -32,6 +32,10 @@ export const COPY = {
     label: "Agents at the same time",
     hint: "How many agents one launch can run at the same time with start_agent. It refuses to start more until one of them finishes.",
   },
+  syncTodos: {
+    label: "Update Linear from agent todos",
+    hint: "After each turn, a todo that starts with a sub-issue key moves that sub-issue forward: In Progress, then Done. The parent moves to In Review when every sub-issue is Done. Statuses never move back.",
+  },
 } as const;
 
 export function AgentSettings({ theme }: PluginSurfaceProps) {
@@ -89,6 +93,16 @@ function AgentEditor({ theme, settings }: { theme: Theme; settings: ReadySetting
             options={LIMIT_OPTIONS}
             disabled={!tools.enabled}
             onValueChange={(value) => change({ maxAgents: Number(value) })}
+          />
+        </SettingsCard>
+      </SettingsSection>
+      <SettingsSection title="Linear status sync">
+        <SettingsCard>
+          <SettingsSwitch
+            label={COPY.syncTodos.label}
+            hint={COPY.syncTodos.hint}
+            value={values.sync.todos}
+            onValueChange={(todos) => edit((current) => ({ ...current, sync: { ...current.sync, todos } }))}
           />
         </SettingsCard>
       </SettingsSection>

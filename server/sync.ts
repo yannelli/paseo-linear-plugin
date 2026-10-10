@@ -1,12 +1,10 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
 import type { WorkflowState } from "../shared/linear";
-import { syncNowRpc } from "../shared/live";
 import { AGENT_LABELS, isInternalAgent } from "../shared/prompts";
 import { type LinearSettings, projectDefaults, projectEnabled } from "../shared/settings";
-import { planStatusMoves, progressByKey, type TodoLike } from "../shared/todo-sync";
+import { latestTodos, planStatusMoves, progressByKey, syncNowRpc, type TodoLike } from "../shared/todo-sync";
 import type { Paseo } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
-import { agentInfo } from "./live";
 
 const STATES_MAX_AGE_MS = 10 * 60_000;
 
@@ -20,12 +18,19 @@ export interface SyncResult {
   skipped: string | null;
 }
 
-function latestTodos(items: readonly { type: string; items?: unknown }[]): TodoLike[] | null {
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (item?.type === "todo" && Array.isArray(item.items)) return item.items as TodoLike[];
-  }
-  return null;
+/** The agent's labels, and the project of its workspace, whose settings apply to it. */
+async function agentInfo(paseo: Paseo, agentId: string) {
+  const handle = paseo.agents.ref(agentId);
+  await handle.refresh();
+  const agent = handle.current();
+  if (!agent) throw new Error("The agent was not found");
+  const workspace = agent.workspaceId
+    ? await paseo.workspaces
+        .ref(agent.workspaceId)
+        .refresh()
+        .catch(() => null)
+    : null;
+  return { labels: agent.labels ?? {}, projectId: workspace?.projectId ?? null };
 }
 
 export function registerSync(server: PluginServerContext, dependencies: SyncDependencies) {
@@ -118,7 +123,7 @@ export function registerSync(server: PluginServerContext, dependencies: SyncDepe
   // A project can turn sync on or off for itself, so the check needs the agent's project.
   server.on("agent.turn_ended", async (event, { paseo }) => {
     const settings = await readSettings();
-    const anyOn = settings?.live.syncTodos || settings?.projects.some((entry) => entry.overrides.syncTodos);
+    const anyOn = settings?.sync.todos || settings?.projects.some((entry) => entry.overrides.syncTodos);
     if (!anyOn) return;
     const todos = latestTodos(event.timeline);
     if (!todos) return;

@@ -10,7 +10,6 @@ import {
 } from "../shared/linear";
 import { agentHooksRpc } from "../shared/agent-hooks";
 import { type Assignment, agentToolsRpc, TOOLS_SERVER } from "../shared/agent-tools";
-import { launchAfterExploreRpc } from "../shared/live";
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
 import type { AgentAction, Guidance, Isolation, LinearSettings, ToolSettings } from "../shared/settings";
 import { type AgentSelection, agentConfig, optionLabel } from "./agent-options";
@@ -145,8 +144,6 @@ export interface LaunchRequest {
   started: WorkflowState | null;
   /** The Paseo project whose Linear key loaded the issue. */
   keyScope: string | null;
-  /** Maps the files with the read-only explore agent first, then starts the agent. */
-  explore: boolean;
   /** Guidance options; for Claude some also add hooks. */
   guidance: Guidance;
   /** The tool settings of the project. */
@@ -263,7 +260,6 @@ export function useLaunchAgent() {
   const paseo = usePaseo();
   const updateIssue = useRpc(updateIssueRpc);
   const attachCard = useRpc(attachIssueCardRpc);
-  const launchAfterExplore = useRpc(launchAfterExploreRpc);
   const prepareHooks = useRpc(agentHooksRpc);
   const prepareTools = useRpc(agentToolsRpc);
   return useMutation({
@@ -315,21 +311,8 @@ export function useLaunchAgent() {
           ...(tools ? { [AGENT_LABELS.tools]: tools.grantId } : {}),
         },
       };
-      // The daemon starts the agent once the map is ready, so agentId is null until then.
-      let agentId: string | null;
-      if (request.explore && action === "implement") {
-        const launched = await launchAfterExplore({
-          workspaceId: workspace.id,
-          identifier: issue.identifier,
-          keyScope: request.keyScope,
-          agent,
-          card,
-        });
-        agentId = launched.agentId;
-      } else {
-        agentId = (await workspace.agents.create(agent)).id;
-        void attachCard({ agentId, card }).catch(() => undefined);
-      }
+      const agentId = (await workspace.agents.create(agent)).id;
+      void attachCard({ agentId, card }).catch(() => undefined);
       lastProjectByTeam.set(issue.team.id, request.project.projectId);
       rememberLaunch({
         agent: request.agent.agent.id,
@@ -345,7 +328,7 @@ export function useLaunchAgent() {
           warning = errorMessage(error);
         }
       }
-      return { agentId, workspaceId: workspace.id, warning };
+      return { agentId, warning };
     },
   });
 }

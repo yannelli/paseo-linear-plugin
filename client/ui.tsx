@@ -3,6 +3,7 @@ import { Icon } from "@getpaseo/plugin/client/react-native";
 import { type ComponentType, type ReactNode, useCallback, useMemo } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   type PressableStateCallbackType,
   type StyleProp,
@@ -14,6 +15,12 @@ import {
 export { Avatar, LabelPill, PriorityIcon, priorityMeta, StateIcon } from "./glyphs";
 
 export type Theme = PluginSurfaceProps["theme"];
+
+export const MONO = Platform.select({
+  ios: "Menlo",
+  android: "monospace",
+  default: "ui-monospace, SFMono-Regular, Menlo, monospace",
+});
 
 /** A Lucide icon name, or a component such as the plugin icon. */
 export type Glyph = string | ComponentType<{ size: number; color: string; theme: Theme }>;

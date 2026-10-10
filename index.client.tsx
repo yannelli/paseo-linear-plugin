@@ -1,14 +1,11 @@
 import type { PluginClientContext } from "@getpaseo/plugin/client";
 import { LinearPanel, LinearScreen } from "./client/browser";
 import { openPluginScreen, registerScreen } from "./client/compat";
-import { gateAgentPanel } from "./client/access";
-import { LivePanel } from "./client/live-panel";
 import { contributeComposerPills } from "./client/pill";
 import { onMenuIconChange, PluginIcon, startMenuIcon } from "./client/plugin-icon";
 import { AgentSettings } from "./client/settings-agents";
 import { ConnectionSettings } from "./client/settings-connection";
 import { IconSettingsScreen } from "./client/settings-icon";
-import { LiveSettings } from "./client/settings-live";
 import { ProjectSettings } from "./client/settings-projects";
 import { PromptSettings } from "./client/settings-prompts";
 import { focusIssue, panelScope, SCREEN_SCOPE, updateBrowser } from "./client/store";
@@ -19,7 +16,6 @@ import { ISSUE_CARD_KIND, IssueCardSchema, LINEAR_IDENTIFIER } from "./shared/li
 
 const SCREEN_ID = "linear";
 const PANEL_ID = "issues";
-const LIVE_PANEL_ID = "live";
 
 type Cleanup = () => void;
 
@@ -39,13 +35,6 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         context: "workspace",
         locations: ["workspace", "explorer"],
         Component: LinearPanel,
-      }),
-      client.addWorkspacePanel({
-        id: LIVE_PANEL_ID,
-        title: "Linear Live",
-        icon: "Radar",
-        context: "agent",
-        Component: gateAgentPanel(LivePanel),
       }),
       client.addCommandCenterItem({
         id: "open-issues",
@@ -79,16 +68,6 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         },
       }),
       client.addCommandCenterItem({
-        id: "open-live",
-        title: "Linear: Open Linear Live",
-        icon: "Radar",
-        keywords: ["linear", "live", "progress", "map"],
-        context: "agent",
-        onSelect({ openPanel }) {
-          openPanel(LIVE_PANEL_ID);
-        },
-      }),
-      client.addCommandCenterItem({
         id: "setup-project",
         title: "Linear: Set up project prompts",
         icon: "Sparkles",
@@ -102,7 +81,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         id: "settings",
         title: "Linear: Settings",
         icon: "Settings",
-        keywords: ["linear", "api key", "prompts", "projects", "agents", "mcp", "tools"],
+        keywords: ["linear", "api key", "prompts", "projects", "agents", "mcp", "tools", "sync"],
         context: "global",
         onSelect({ openSettings }) {
           openSettings("connection");
@@ -172,12 +151,6 @@ export default function contribute(client: PluginClientContext) {
     title: "Agents",
     icon: "Bot",
     Component: AgentSettings,
-  });
-  client.addSettingsScreen({
-    id: "live",
-    title: "Live",
-    icon: "Radar",
-    Component: LiveSettings,
   });
   client.addSettingsScreen({
     id: "icon",

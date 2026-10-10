@@ -49,7 +49,7 @@ function setup(options: {
       run(linear),
   } as unknown as LinearAccess;
   const settings = linearSettings.schema.parse({
-    live: { syncTodos: options.syncTodos },
+    sync: { todos: options.syncTodos },
     access: options.access ?? {},
     projects:
       options.shopSync === undefined
@@ -87,7 +87,7 @@ describe("todo sync hook", () => {
     for (const [syncTodos, labels] of [
       [false, implement],
       [true, { ...implement, "linear.action": "review" }],
-      [true, { ...implement, "linear.explore": "ENG-1" }],
+      [true, { ...implement, "linear.init": "p1" }],
     ] as const) {
       const { turnEnded, updates } = setup({ syncTodos, labels });
       await turnEnded([todos]);

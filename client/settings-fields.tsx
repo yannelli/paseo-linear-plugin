@@ -5,8 +5,7 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { TEMPLATE_VARIABLES } from "../shared/prompts";
 import type { LinearSettings, linearSettings } from "../shared/settings";
-import { MONO } from "./live-issues";
-import type { Theme } from "./ui";
+import { MONO, type Theme } from "./ui";
 
 export type ReadySettings = Extract<
   SettingsState<typeof linearSettings.schema>,
