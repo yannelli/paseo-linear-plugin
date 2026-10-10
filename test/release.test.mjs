@@ -65,8 +65,8 @@ test("version preparation updates package and both lockfile versions", async (t)
 
 test("version preparation rejects drift and malformed versions before writing", async (t) => {
   const cwd = await fixture(t);
-  for (const version of ["1.0", "v1.0.0", "01.0.0", "1.0.0-dev.1"]) {
-    await assert.rejects(prepare({}, { cwd, nextRelease: { version } }), /Invalid stable release version/);
+  for (const version of ["1.0", "v1.0.0", "01.0.0", "1.0.0-dev.1", "1.0.0-beta.01", "1.0.0-alpha.01"]) {
+    await assert.rejects(prepare({}, { cwd, nextRelease: { version } }), /Invalid release version/);
   }
   const file = join(cwd, "package-lock.json");
   const lock = JSON.parse(await readFile(file, "utf8"));

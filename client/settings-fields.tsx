@@ -5,7 +5,7 @@ import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import { TEMPLATE_VARIABLES } from "../shared/prompts";
 import type { LinearSettings, linearSettings } from "../shared/settings";
-import type { Theme } from "./ui";
+import { MONO, type Theme } from "./ui";
 
 export type ReadySettings = Extract<
   SettingsState<typeof linearSettings.schema>,
@@ -19,10 +19,14 @@ export function MultilineField(props: {
   value: string;
   placeholder?: string;
   minHeight?: number;
+  error?: string | null;
+  /** Markup, not prose: a monospace font and no autocorrect. */
+  code?: boolean;
   onChange(value: string): void;
 }) {
   const { colors } = props.theme;
   const minHeight = props.minHeight ?? 96;
+  const { code } = props;
   const style = useMemo(
     () => ({
       marginTop: 8,
@@ -36,11 +40,12 @@ export function MultilineField(props: {
       fontSize: 13,
       lineHeight: 19,
       textAlignVertical: "top" as const,
+      ...(code ? { fontFamily: MONO, fontSize: 12 } : {}),
     }),
-    [colors, minHeight],
+    [colors, minHeight, code],
   );
   return (
-    <SettingsRow label={props.label} hint={props.hint}>
+    <SettingsRow label={props.label} hint={props.hint} error={props.error}>
       <TextInput
         value={props.value}
         onChangeText={props.onChange}
@@ -48,7 +53,9 @@ export function MultilineField(props: {
         placeholder={props.placeholder}
         placeholderTextColor={colors.foregroundMuted}
         accessibilityLabel={props.label}
-        autoCapitalize="sentences"
+        autoCapitalize={code ? "none" : "sentences"}
+        autoCorrect={!code}
+        spellCheck={!code}
         style={style}
       />
     </SettingsRow>

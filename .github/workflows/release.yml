@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta, alpha]
   workflow_dispatch:
 
 permissions:
@@ -10,18 +10,18 @@ permissions:
   id-token: write
 
 concurrency:
-  group: release-main
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta' || github.ref == 'refs/heads/alpha'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: main
+          ref: ${{ github.ref_name }}
           fetch-depth: 0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -45,6 +45,10 @@ jobs:
           version="$(jq -r .version package.json)"
           if [ "$(npm view "$name@$version" version 2>/dev/null)" = "$version" ]; then
             echo "npm already has $name@$version"
+          elif [[ "$version" == *-beta.* ]]; then
+            npm publish --tag beta
+          elif [[ "$version" == *-alpha.* ]]; then
+            npm publish --tag alpha
           else
             npm publish
           fi

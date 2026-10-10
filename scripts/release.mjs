@@ -6,6 +6,9 @@ import { pathToFileURL } from "node:url";
 import { manifestPaths, prepare, verifyConditions } from "./release-manifests.mjs";
 
 const stableTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const prereleaseTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(alpha|beta)\.(0|[1-9]\d*)$/;
+// Each release branch and the prerelease channel it publishes to; main publishes stable versions.
+const channels = { main: null, beta: "beta", alpha: "alpha" };
 const levels = { patch: 1, minor: 2, major: 3 };
 const releaseMarker = "<!-- paseo-linear-release -->";
 
@@ -29,6 +32,19 @@ export function nextVersion(version, commits) {
   if (type === "major") return `${major + 1n}.0.0`;
   if (type === "minor") return `${major}.${minor + 1n}.0`;
   return `${major}.${minor}.${patch + 1n}`;
+}
+
+/** The next prerelease of a channel toward a stable version, after the ones already tagged for it. */
+export function nextPrerelease(stable, tags, channel = "beta") {
+  const prefix = `v${stable}-${channel}.`;
+  const numbers = tags.filter((tag) => tag.startsWith(prefix) && prereleaseTag.test(tag)).map((tag) => Number(tag.slice(prefix.length)));
+  return `${stable}-${channel}.${numbers.length ? Math.max(...numbers) + 1 : 0}`;
+}
+
+function compareStable(a, b) {
+  const [x, y] = [a, b].map((version) => version.split(".").map(BigInt));
+  for (let index = 0; index < 3; index += 1) if (x[index] !== y[index]) return x[index] > y[index] ? 1 : -1;
+  return 0;
 }
 
 function git(...args) {
@@ -69,6 +85,7 @@ export function releaseNotes(version, previousTag, commits) {
 }
 
 async function publishRelease(tag, notes, repository) {
+  const prerelease = prereleaseTag.test(tag);
   const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
   if (!token) throw new Error("GH_TOKEN or GITHUB_TOKEN is required to publish a release");
   const endpoint = `${process.env.GITHUB_API_URL || "https://api.github.com"}/repos/${repository}/releases`;
@@ -82,7 +99,7 @@ async function publishRelease(tag, notes, repository) {
   const response = await fetch(endpoint, {
     method: "POST",
     headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_name: tag, name: tag, body: notes, draft: false, prerelease: false, make_latest: "true" }),
+    body: JSON.stringify({ tag_name: tag, name: tag, body: notes, draft: false, prerelease, make_latest: prerelease ? "false" : "true" }),
   });
   if (!response.ok) throw new Error(`GitHub release creation failed: HTTP ${response.status}: ${await response.text()}`);
   console.log(`Published ${(await response.json()).html_url}`);
@@ -90,21 +107,38 @@ async function publishRelease(tag, notes, repository) {
 
 export async function release({ dryRun = true } = {}) {
   const cwd = process.cwd();
-  if (git("branch", "--show-current") !== "main") throw new Error("Releases run from main");
+  const branch = git("branch", "--show-current");
+  if (!Object.hasOwn(channels, branch)) throw new Error("Releases run from main, beta, or alpha");
+  const channel = channels[branch];
   if (git("status", "--porcelain")) throw new Error("Release checkout must be clean");
   const currentVersion = await verifyConditions({}, { cwd });
-  const tags = git("tag", "--merged", "HEAD", "--sort=-version:refname").split("\n").filter((tag) => stableTag.test(tag));
-  const previousTag = tags[0];
-  if (previousTag && `v${currentVersion}` !== previousTag) throw new Error(`Manifest version ${currentVersion} does not match ${previousTag}`);
+  const merged = git("tag", "--merged", "HEAD", "--sort=-version:refname").split("\n");
+  const previousTag = merged.find((tag) => stableTag.test(tag));
+  // A prerelease manifest is allowed on main after a prerelease branch merges; the next stable release replaces it.
+  const [currentStable, currentPrerelease] = currentVersion.split("-");
+  if (previousTag && !currentPrerelease && `v${currentVersion}` !== previousTag) throw new Error(`Manifest version ${currentVersion} does not match ${previousTag}`);
+  if (previousTag && currentPrerelease && compareStable(currentStable, previousTag.slice(1)) <= 0) {
+    throw new Error(`Manifest version ${currentVersion} is not ahead of ${previousTag}`);
+  }
+  if (channel && !previousTag) throw new Error(`${channel === "alpha" ? "An alpha" : "A beta"} needs a stable release first`);
   const commits = commitsSince(previousTag);
-  const version = previousTag ? nextVersion(currentVersion, commits) : currentVersion;
+  const stable = previousTag ? nextVersion(previousTag.slice(1), commits) : currentVersion;
+  let version = stable;
+  if (channel && stable) {
+    // Only a release-triggering commit since the channel's last prerelease makes a new one.
+    const last = merged.find((tag) => prereleaseTag.test(tag) && tag.startsWith(`v${stable}-${channel}.`));
+    const fresh = last ? nextVersion("0.0.0", commitsSince(last)) : stable;
+    version = fresh ? nextPrerelease(stable, git("tag", "--list").split("\n"), channel) : null;
+  }
   const repository = process.env.GITHUB_REPOSITORY;
   if (!dryRun) {
     if (!repository || !/^[\w.-]+\/[\w.-]+$/.test(repository)) throw new Error("GITHUB_REPOSITORY must be owner/repo");
     if (!(process.env.GH_TOKEN || process.env.GITHUB_TOKEN)) throw new Error("GH_TOKEN or GITHUB_TOKEN is required");
-    if (previousTag) {
-      const annotation = git("for-each-ref", `refs/tags/${previousTag}`, "--format=%(contents)");
-      if (annotation.includes(releaseMarker)) await publishRelease(previousTag, annotation.replace(releaseMarker, "").trim(), repository);
+    // Finish a release whose tag was pushed but whose GitHub release failed.
+    const repairTag = merged.includes(`v${currentVersion}`) ? `v${currentVersion}` : null;
+    if (repairTag) {
+      const annotation = git("for-each-ref", `refs/tags/${repairTag}`, "--format=%(contents)");
+      if (annotation.includes(releaseMarker)) await publishRelease(repairTag, annotation.replace(releaseMarker, "").trim(), repository);
     }
   }
   if (!version) {
@@ -126,7 +160,7 @@ export async function release({ dryRun = true } = {}) {
   try {
     writeFileSync(notesPath, `${notes}\n${releaseMarker}\n`);
     git("tag", "-a", `v${version}`, "-F", notesPath);
-    git("push", "--atomic", "origin", "HEAD:refs/heads/main", `refs/tags/v${version}`);
+    git("push", "--atomic", "origin", `HEAD:refs/heads/${branch}`, `refs/tags/v${version}`);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

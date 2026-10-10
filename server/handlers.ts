@@ -37,7 +37,16 @@ function listKey(query: IssueQuery) {
   return { teamId, assignee, status, query: text.trim(), sort, after };
 }
 
-export function registerHandlers(server: PluginServerContext, dependencies: HandlerDependencies) {
+/** Linear access for todo sync and the agent tools. */
+export interface LinearAccess {
+  connect(projectId: ProjectId): Promise<{ linear: LinearService; fingerprint: string }>;
+  mutate<T>(projectId: ProjectId, run: (linear: LinearService) => Promise<T>): Promise<T>;
+}
+
+export function registerHandlers(
+  server: PluginServerContext,
+  dependencies: HandlerDependencies,
+): LinearAccess {
   const { credentials, endpoint } = dependencies;
   const cache =
     dependencies.cache ?? createResponseCache({ maxEntries: 300, maxAgeMs: 24 * 60 * 60 * 1000 });
@@ -169,4 +178,6 @@ export function registerHandlers(server: PluginServerContext, dependencies: Hand
       return { attached: false };
     }
   });
+
+  return { connect, mutate };
 }

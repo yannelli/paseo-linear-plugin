@@ -106,3 +106,85 @@ test("publication creates 0.1.0, repairs interrupted releases, and bumps once", 
   assert.equal(attempts, 4);
   assert.equal(git("tag", "--list"), "v0.1.0\nv0.1.1");
 });
+
+test("the beta branch publishes prereleases toward the next version, then main releases it", async (t) => {
+  const { cwd, git } = await repository(t);
+  const published = new Map();
+  const server = createServer(async (request, response) => {
+    if (request.method === "GET") {
+      const tag = request.url.split("/").at(-1);
+      response.writeHead(published.has(tag) ? 200 : 404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(published.get(tag) || { message: "Not Found" }));
+      return;
+    }
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const payload = JSON.parse(Buffer.concat(chunks));
+    published.set(payload.tag_name, payload);
+    response.writeHead(201, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ ...payload, html_url: `https://example.test/releases/${payload.tag_name}` }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  const env = { ...process.env, GH_TOKEN: "test-token", GITHUB_REPOSITORY: "test/linear", GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` };
+  const publish = () => execute(process.execPath, [script, "--publish"], { cwd, env });
+  await publish();
+  git("checkout", "-b", "beta");
+  git("commit", "--allow-empty", "-m", "feat: add the graph");
+  await publish();
+  assert.equal(JSON.parse(await readFile(join(cwd, "package.json"), "utf8")).version, "0.2.0-beta.0");
+  assert.equal(published.get("v0.2.0-beta.0").prerelease, true);
+  assert.equal(published.get("v0.2.0-beta.0").make_latest, "false");
+  assert.equal(git("rev-parse", "origin/beta"), git("rev-parse", "v0.2.0-beta.0^{}"));
+  git("commit", "--allow-empty", "-m", "fix: keep labels inside");
+  await publish();
+  assert.ok(published.has("v0.2.0-beta.1"));
+  git("commit", "--allow-empty", "-m", "docs: describe the graph");
+  await publish();
+  assert.equal(git("tag", "--list", "v0.2.0-*"), "v0.2.0-beta.0\nv0.2.0-beta.1");
+  git("checkout", "main");
+  git("merge", "--squash", "beta");
+  git("commit", "-m", "feat: add the graph");
+  await publish();
+  assert.equal(published.get("v0.2.0").prerelease, false);
+  assert.equal(JSON.parse(await readFile(join(cwd, "package.json"), "utf8")).version, "0.2.0");
+});
+
+test("the alpha branch publishes alpha prereleases with their own numbers", async (t) => {
+  const { cwd, git } = await repository(t);
+  const published = new Map();
+  const server = createServer(async (request, response) => {
+    if (request.method === "GET") {
+      const tag = request.url.split("/").at(-1);
+      response.writeHead(published.has(tag) ? 200 : 404, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(published.get(tag) || { message: "Not Found" }));
+      return;
+    }
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const payload = JSON.parse(Buffer.concat(chunks));
+    published.set(payload.tag_name, payload);
+    response.writeHead(201, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({ ...payload, html_url: `https://example.test/releases/${payload.tag_name}` }));
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); }));
+  const env = { ...process.env, GH_TOKEN: "test-token", GITHUB_REPOSITORY: "test/linear", GITHUB_API_URL: `http://127.0.0.1:${server.address().port}` };
+  const publish = () => execute(process.execPath, [script, "--publish"], { cwd, env });
+  await publish();
+  git("checkout", "-b", "beta");
+  git("commit", "--allow-empty", "-m", "feat: add the queue");
+  await publish();
+  git("checkout", "-b", "alpha");
+  git("commit", "--allow-empty", "-m", "feat: add agent settings");
+  await publish();
+  assert.equal(JSON.parse(await readFile(join(cwd, "package.json"), "utf8")).version, "0.2.0-alpha.0");
+  assert.equal(published.get("v0.2.0-alpha.0").prerelease, true);
+  assert.equal(published.get("v0.2.0-alpha.0").make_latest, "false");
+  assert.equal(git("rev-parse", "origin/alpha"), git("rev-parse", "v0.2.0-alpha.0^{}"));
+  git("commit", "--allow-empty", "-m", "fix: keep the limit");
+  await publish();
+  git("commit", "--allow-empty", "-m", "docs: describe the settings");
+  await publish();
+  assert.equal(git("tag", "--list", "v0.2.0-*"), "v0.2.0-alpha.0\nv0.2.0-alpha.1\nv0.2.0-beta.0");
+});

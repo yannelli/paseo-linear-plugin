@@ -21,6 +21,9 @@ import {
   upsertProject,
 } from "../shared/settings";
 import { effectiveKeyScope, KeyScopeProvider } from "./key-scope";
+import { ProjectSetup } from "./project-init";
+import { AccessSection } from "./settings-access";
+import { ProjectOverridesSection } from "./settings-overrides";
 import { type PaseoProjectOption, useAuthStatus, useCatalog, useProjects } from "./queries";
 import {
   MultilineField,
@@ -40,11 +43,15 @@ const STEPS_PLACEHOLDER = "Run the type checker\nUpdate the changelog\nOpen a dr
 
 type Change = (patch: Partial<ProjectConfig>) => void;
 
-export function ProjectSettings({ theme }: PluginSurfaceProps) {
+export function ProjectSettings({ theme, navigation }: PluginSurfaceProps) {
   const settings = useSettings(linearSettings);
+  const openAgent = useMemo(
+    () => (navigation ? (agentId: string) => navigation.openAgent({ agentId }) : undefined),
+    [navigation],
+  );
   const render = useCallback(
-    (ready: ReadySettings) => <ProjectEditor theme={theme} settings={ready} />,
-    [theme],
+    (ready: ReadySettings) => <ProjectEditor theme={theme} settings={ready} openAgent={openAgent} />,
+    [theme, openAgent],
   );
   return (
     <SettingsGate theme={theme} title="Projects" settings={settings}>
@@ -70,7 +77,12 @@ function projectOptions(
   return [...known, ...missing];
 }
 
-function ProjectEditor({ theme, settings }: { theme: Theme; settings: ReadySettings }) {
+function ProjectEditor(props: {
+  theme: Theme;
+  settings: ReadySettings;
+  openAgent?: (agentId: string) => void;
+}) {
+  const { theme, settings } = props;
   const { values, dirty, edit, save, discard } = useSettingsDraft(settings);
   const projects = useProjects();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -120,6 +132,12 @@ function ProjectEditor({ theme, settings }: { theme: Theme; settings: ReadySetti
   }
   return (
     <View>
+      <AccessSection
+        access={values.access}
+        saved={settings.values.access}
+        projects={projects.data}
+        edit={edit}
+      />
       <SettingsSection title="Project">
         <SettingsCard>
           <SettingsSelect
@@ -131,7 +149,9 @@ function ProjectEditor({ theme, settings }: { theme: Theme; settings: ReadySetti
           <SettingsRow label="Folder" hint={config.rootPath || "Unknown"} />
         </SettingsCard>
       </SettingsSection>
+      <ProjectOverridesSection values={values} config={config} change={change} />
       <TeamsSection config={config} change={change} />
+      <ProjectSetup theme={theme} config={config} change={change} openAgent={props.openAgent} />
       <InstructionsSection theme={theme} config={config} change={change} />
       {AGENT_ACTIONS.map((action) => (
         <ActionSection key={action} theme={theme} action={action} config={config} change={change} />

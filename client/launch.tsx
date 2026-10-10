@@ -13,9 +13,11 @@ import {
 } from "../shared/settings";
 import { modeIcon, optionLabel } from "./agent-options";
 import { useKeyScope } from "./key-scope";
+import { promptAssignments, SubIssueAgents, useSubIssueAgents } from "./launch-assignments";
 import { type LaunchChoices, useLaunchChoices } from "./launch-choices";
 import { Chip, Field, Toggle } from "./launch-fields";
-import { linearPatch, type TargetWorkspace, useLaunchAgent } from "./launch-plan";
+import { GuidanceToggles, useProjectGuidance } from "./launch-guidance";
+import { linearPatch, type SubIssueAgent, type TargetWorkspace, useLaunchAgent } from "./launch-plan";
 import { ModelBrowser } from "./model-browser";
 import { PickerModal } from "./pickers";
 import { ProviderIcon } from "./provider-icon";
@@ -42,6 +44,7 @@ type PickerKind = "prompt" | "model" | "effort" | "mode" | "project" | "placemen
 type ListPickerKind = Exclude<PickerKind, "model">;
 
 const SCROLL_STYLE = { flex: 1 } as const;
+const NO_ASSIGNMENTS: readonly SubIssueAgent[] = [];
 const PROMPT_CHOICES = AGENT_ACTIONS.map((action) => ({
   value: action,
   label: ACTION_LABELS[action].title,
@@ -150,13 +153,23 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
       ?.states.find((state) => state.type === "started") ?? null;
   const canStart = action === "implement" && !["started", "completed"].includes(issue.state.type);
   const canAssign = action === "implement" && viewerId !== null && issue.assignee?.id !== viewerId;
-  const [includeComments, setIncludeComments] = useState(settings.launch.includeComments);
-  const [moveToStarted, setMoveToStarted] = useState(settings.launch.moveToStarted);
-  const [assignToMe, setAssignToMe] = useState(settings.launch.assignToMe);
+  // Null until the user flips the option. Until then it follows the chosen project.
+  const { defaults } = choices;
+  const [commentsChoice, setIncludeComments] = useState<boolean | null>(null);
+  const [startedChoice, setMoveToStarted] = useState<boolean | null>(null);
+  const [assignChoice, setAssignToMe] = useState<boolean | null>(null);
+  const includeComments = commentsChoice ?? defaults.launch.includeComments;
+  const moveToStarted = startedChoice ?? defaults.launch.moveToStarted;
+  const assignToMe = assignChoice ?? defaults.launch.assignToMe;
   const [picker, setPicker] = useState<PickerKind | null>(null);
   // Null until the user types. Until then the prompt follows the template and options.
   const [customPrompt, setCustomPrompt] = useState<string | null>(null);
   const { projectConfig } = choices;
+  const { guidance, change: changeGuidance } = useProjectGuidance(choices.project, projectConfig);
+  const { tools } = defaults;
+  const subAgents = useSubIssueAgents(issue, choices);
+  const assigning = action === "implement" && tools.assignAgents && issue.children.length > 0;
+  const assignments = assigning && tools.enabled ? subAgents.assignments : NO_ASSIGNMENTS;
   const generated = useMemo(
     () =>
       composePrompt({
@@ -166,8 +179,10 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
         project: projectConfig,
         includeComments,
         extraInstructions: "",
+        guidance,
+        tools: { ...tools, assignments: promptAssignments(assignments) },
       }),
-    [action, issue, settings, projectConfig, includeComments],
+    [action, issue, settings, projectConfig, includeComments, guidance, tools, assignments],
   );
   const prompt = customPrompt ?? generated;
   const styles = useMemo(() => {
@@ -271,13 +286,16 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
         patch,
         started,
         keyScope,
+        guidance,
+        tools,
+        assignments,
       },
       {
         onSuccess: ({ agentId, warning }) => {
           void queries.invalidateQueries({ queryKey: ["linear"] });
           if (warning) {
             toast.show(`Agent started. Linear was not updated: ${warning}`, { variant: "warning" });
-          } else toast.show("Agent started", { variant: "success" });
+          } else toast.show("Agent started.", { variant: "success" });
           onStarted();
           navigation?.openAgent({ agentId });
         },
@@ -296,6 +314,9 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
     issue,
     prompt,
     keyScope,
+    guidance,
+    tools,
+    assignments,
     queries,
     toast,
     onStarted,
@@ -438,6 +459,26 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
             />
           ) : null}
         </View>
+        <View style={styles.group}>
+          <SectionLabel theme={theme}>Agent guidance</SectionLabel>
+          <GuidanceToggles theme={theme} guidance={guidance} tools={tools} onChange={changeGuidance} />
+        </View>
+        {assigning ? (
+          <View style={styles.group}>
+            <SectionLabel theme={theme}>Sub-issue agents</SectionLabel>
+            <SubIssueAgents
+              theme={theme}
+              issue={issue}
+              choices={choices}
+              state={subAgents}
+              blocked={
+                tools.enabled
+                  ? null
+                  : "Sub-issue agents need the plugin's Linear tools, which are off for this project. Turn them on in Linear settings, under Agents."
+              }
+            />
+          </View>
+        ) : null}
         {launch.error ? (
           <Text accessibilityRole="alert" style={styles.error}>
             {errorMessage(launch.error)}

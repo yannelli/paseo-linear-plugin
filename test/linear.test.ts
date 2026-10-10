@@ -179,6 +179,14 @@ describe("agent prompts", () => {
   const settings = linearSettings.schema.parse({});
   const project = emptyProjectConfig({ projectId: "p1", displayName: "Shop", rootPath: "/shop" });
 
+  it("adds the project's saved guidance unless the launch passes its own", () => {
+    const guided = { ...project, guidance: { updateLinear: false, subagentKeys: false, paseoSubagents: true } };
+    const base = { action: "implement" as const, issue: detail, settings, includeComments: false, extraInstructions: "" };
+    expect(composePrompt({ ...base, project: guided })).toContain("linear start_agent tool");
+    const none = { updateLinear: false, subagentKeys: false, paseoSubagents: false };
+    expect(composePrompt({ ...base, project: guided, guidance: none })).not.toContain("Paseo agents");
+  });
+
   it("renders the built-in implement prompt with the issue snapshot and branch", () => {
     const prompt = composePrompt({
       action: "implement",
@@ -232,6 +240,18 @@ describe("agent prompts", () => {
     expect(prompt).not.toContain("You are working on");
   });
 
+  it("asks implementers for one keyed todo per sub-issue only when sub-issues exist", () => {
+    const children = [{ id: "c1", identifier: "ENG-124", title: "Queue", state }];
+    const base = { settings, project: null, includeComments: false, extraInstructions: "" };
+    const implement = composePrompt({ ...base, action: "implement", issue: { ...detail, children } });
+    expect(implement).toContain('Start each todo with its sub-issue key, for example "ENG-124: <task>".');
+    const review = composePrompt({ ...base, action: "review", issue: { ...detail, children } });
+    expect(review).not.toContain("Start each todo");
+    expect(composePrompt({ ...base, action: "implement", issue: detail })).not.toContain(
+      "Start each todo",
+    );
+  });
+
   it("parses empty settings into complete defaults", () => {
     expect(settings).toEqual({
       templates: { implement: "", review: "" },
@@ -242,7 +262,11 @@ describe("agent prompts", () => {
         moveToStarted: true,
         assignToMe: true,
       },
+      sync: { todos: false },
+      tools: { enabled: true, allowEdits: true, assignAgents: true, maxAgents: 0 },
+      access: { allProjects: true, projects: {} },
       projects: [],
+      icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false, menu: "SquareKanban" },
     });
   });
 });

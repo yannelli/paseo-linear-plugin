@@ -4,6 +4,7 @@ import { useCallback, useMemo } from "react";
 import { Pressable, Text, View } from "react-native";
 import type { IssueCard } from "../shared/linear";
 import { ACTION_LABELS } from "../shared/prompts";
+import { PluginIcon } from "./plugin-icon";
 import { usePressableStyle } from "./ui";
 
 export function IssueCardRow({ item, theme }: PluginTimelineItemProps<IssueCard>) {
@@ -44,7 +45,7 @@ export function IssueCardRow({ item, theme }: PluginTimelineItemProps<IssueCard>
       onPress={open}
       style={style}
     >
-      <Icon name="SquareKanban" size={16} color={colors.foregroundMuted} />
+      <PluginIcon size={16} color={colors.foregroundMuted} theme={theme} />
       <View style={styles.body}>
         <Text numberOfLines={1} style={styles.title}>
           <Text style={styles.identifier}>{`${card.identifier}  `}</Text>

@@ -2,7 +2,7 @@ import { usePaseo } from "@getpaseo/plugin/client";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 import type { IssueDetail } from "../shared/linear";
-import type { AgentAction, LinearSettings } from "../shared/settings";
+import { type AgentAction, type LinearSettings, projectDefaults, projectEnabled } from "../shared/settings";
 import { type AgentPicks, resolveAgent } from "./agent-options";
 import { loadAgentPreferences } from "./agent-preferences";
 import {
@@ -41,7 +41,15 @@ export function useLaunchChoices(input: {
   target: TargetWorkspace | null;
 }) {
   const { issue, settings, action } = input;
-  const projects = useProjects();
+  const allProjects = useProjects();
+  // Projects where Linear is off are not offered as launch targets.
+  const projects = useMemo(
+    () => ({
+      ...allProjects,
+      data: allProjects.data?.filter((entry) => projectEnabled(settings.access, entry.projectId)),
+    }),
+    [allProjects, settings.access],
+  );
   const providers = useProviders();
   const { target } = input;
   const prNumber = action === "review" ? pullRequestNumber(issue) : null;
@@ -54,10 +62,14 @@ export function useLaunchChoices(input: {
   const [placementChoice, setPlacementChoice] = useState<Placement | null>(null);
   const [picks, setPicks] = useState<AgentPicks>(NO_PICKS);
   const [remembered] = useState(loadAgentPreferences);
-  const projectId =
+  const preferredId =
     projectChoice ??
     defaultProjectId({ target, teamId: issue.team.id, settings, projects: projects.data });
-  const project = projects.data?.find((entry) => entry.projectId === projectId) ?? null;
+  const project =
+    projects.data?.find((entry) => entry.projectId === preferredId) ??
+    (projectChoice ? null : (projects.data?.[0] ?? null));
+  const projectId = project?.projectId ?? preferredId;
+  const defaults = projectDefaults(settings, projectId);
   const placements = useMemo(
     () =>
       placementOptions({
@@ -74,10 +86,10 @@ export function useLaunchChoices(input: {
     placements,
     placementChoice,
     action,
-    settings.launch.isolation,
+    defaults.launch.isolation,
   );
   const agents = providers.data ?? [];
-  const agent = resolveAgent(agents, picks, settings.launch.provider, remembered);
+  const agent = resolveAgent(agents, picks, defaults.launch.provider, remembered);
   const chooseProject = useCallback((value: string) => {
     setProjectChoice(value);
     setPlacementChoice(null);
@@ -114,6 +126,9 @@ export function useLaunchChoices(input: {
     prNumber,
     project,
     projectConfig: settings.projects.find((entry) => entry.projectId === projectId) ?? null,
+    /** Launch and tool settings with the project's own values applied. */
+    defaults,
+    remembered,
     placements,
     placement,
     chooseProject,
