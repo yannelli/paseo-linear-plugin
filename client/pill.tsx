@@ -4,7 +4,7 @@ import type {
   PluginClientContext,
 } from "@getpaseo/plugin/client";
 import { useAgent, usePaseo, useRpc, useSettings } from "@getpaseo/plugin/client";
-import { ScrollView, TextInput, useToast } from "@getpaseo/plugin/client/react-native";
+import { TextInput, useToast } from "@getpaseo/plugin/client/react-native";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { type ComponentType, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -70,7 +70,6 @@ function textStyles(theme: Theme, compact: boolean) {
     track: { width: 40, height: 3, borderRadius: 2, backgroundColor: colors.border },
     fill: { height: 3, borderRadius: 2, backgroundColor: colors.accent },
     actions: { flexDirection: "row" as const, flexWrap: "wrap" as const, gap: 6, paddingTop: 4 },
-    list: { maxHeight: 240 },
     option: { borderRadius: 6, paddingHorizontal: 6 },
   };
 }
@@ -109,26 +108,6 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
         </Text>
       </View>
       {issue.isError ? <Text style={styles.danger}>{errorMessage(issue.error)}</Text> : null}
-      <ScrollView style={styles.list}>
-        {(data?.children ?? []).map((child) => {
-          const entry = progress.get(child.identifier.toUpperCase());
-          const ratio = entry ? entry.completed / entry.total : 0;
-          return (
-            <View key={child.id} style={styles.row}>
-              <StateIcon state={child.state} size={14} />
-              <Text numberOfLines={1} style={styles.key}>
-                {child.identifier}
-              </Text>
-              <Text numberOfLines={1} style={styles.child}>
-                {child.title}
-              </Text>
-              <View style={styles.track}>
-                <View style={[styles.fill, { width: `${Math.round(ratio * 100)}%` }]} />
-              </View>
-            </View>
-          );
-        })}
-      </ScrollView>
       <View style={styles.actions}>
         {live && live.enabled ? (
           <Button
@@ -165,6 +144,29 @@ function LinkedIssue(props: ContentProps & { open: Open }) {
         ) : null}
       </View>
       {syncNow.error ? <Text style={styles.danger}>{errorMessage(syncNow.error)}</Text> : null}
+      {/* Paseo scrolls the popover. On phones a second scroll view sets the sheet height to its
+          own content, so an issue without sub-issues opened a sheet that showed only its title.
+          The buttons come first, so a long list does not push them out of view. */}
+      <View>
+        {(data?.children ?? []).map((child) => {
+          const entry = progress.get(child.identifier.toUpperCase());
+          const ratio = entry ? entry.completed / entry.total : 0;
+          return (
+            <View key={child.id} style={styles.row}>
+              <StateIcon state={child.state} size={14} />
+              <Text numberOfLines={1} style={styles.key}>
+                {child.identifier}
+              </Text>
+              <Text numberOfLines={1} style={styles.child}>
+                {child.title}
+              </Text>
+              <View style={styles.track}>
+                <View style={[styles.fill, { width: `${Math.round(ratio * 100)}%` }]} />
+              </View>
+            </View>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -238,7 +240,7 @@ function SendIssue({ theme, layout, agentId, close }: ContentProps) {
       />
       {results.error ? <Text style={styles.danger}>{errorMessage(results.error)}</Text> : null}
       {send.error ? <Text style={styles.danger}>{errorMessage(send.error)}</Text> : null}
-      <ScrollView keyboardShouldPersistTaps="handled" style={styles.list}>
+      <View>
         {(results.data?.items ?? []).slice(0, 20).map((item) => (
           <Pressable
             key={item.id}
@@ -260,7 +262,7 @@ function SendIssue({ theme, layout, agentId, close }: ContentProps) {
             </Text>
           </Pressable>
         ))}
-      </ScrollView>
+      </View>
       {results.data?.items.length === 0 ? (
         <Text style={styles.muted}>No matching issues.</Text>
       ) : null}
