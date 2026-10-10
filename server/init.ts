@@ -2,7 +2,8 @@ import type { PluginServerContext } from "@getpaseo/plugin/server";
 import { type InitProposal, InitProposalSchema, initStartRpc, initStatusRpc } from "../shared/project-setup";
 import { AGENT_LABELS } from "../shared/prompts";
 import { type LinearSettings, projectDefaults } from "../shared/settings";
-import { createJobStore, READ_ONLY_RULES, startInternalRun } from "./agent-runs";
+import { createJobStore, startInternalRun } from "./agent-runs";
+import { READ_ONLY_RULES } from "./read-only";
 
 export function initPrompt(rootPath: string): string {
   return [

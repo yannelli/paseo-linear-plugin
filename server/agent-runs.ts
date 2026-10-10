@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PluginHandlerContext, PluginLifecycleEvents } from "@getpaseo/plugin/server";
 import { type ZodType, z } from "zod";
 import type { Job } from "../shared/project-setup";
+import { readOnlyAnswer } from "./read-only";
 
 // Project setup runs a read-only agent, waits for it in the background, and reads a JSON
 // answer from its last message. Claude ignores outputSchema, so the prompt asks for JSON.
@@ -66,69 +67,6 @@ export function strictJsonSchema(schema: ZodType): Record<string, unknown> {
     );
   };
   return strip(z.toJSONSchema(schema, { io: "output" })) as Record<string, unknown>;
-}
-
-// Some Claude builds search only through the shell, so internal agents may run a short list of
-// commands that read. Anything that writes, runs other programs, or leaves the folder is denied.
-const READ_COMMAND = /^(?:ls|find|rg|grep|cat|head|tail|wc|pwd|git (?:ls-files|grep))(?:\s|$)/;
-const UNSAFE_SHELL =
-  /[`;&<>~$\n\r]|\.\.|\s-(?:exec|execdir|ok|okdir|delete|fprint\w*|fls|O)\b|\s--(?:pre|open-files-in-pager)\b/;
-/** Quoted text the shell does not expand: single quotes, or double quotes without $ or `. */
-const LITERAL = /'[^']*'|"[^"$`\\]*"/g;
-
-/** The path relative to the folder, or null when it leaves the folder. */
-function relativePath(filePath: string, cwd: string): string | null {
-  let value = filePath.trim().replace(/\\/g, "/");
-  const root = cwd.trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  if (root && value.startsWith(`${root}/`)) value = value.slice(root.length + 1);
-  else if (value.startsWith("/") || /^[A-Za-z]:\//.test(value)) return null;
-  value = value.replace(/^(\.\/)+/, "");
-  if (!value || value.split("/").includes("..")) return null;
-  return value;
-}
-
-function insideFolder(filePath: string, cwd: string): boolean {
-  return filePath.replace(/\/+$/, "") === cwd.replace(/\/+$/, "") || relativePath(filePath, cwd) !== null;
-}
-
-export function readOnlyCommand(command: string, cwd: string): boolean {
-  const text = command.replace(/\s2>\s*\/dev\/null/g, " ").trim();
-  const bare = text.replace(LITERAL, "Q");
-  if (!bare || UNSAFE_SHELL.test(bare)) return false;
-  const outside = text.split(/\s+|=/).some((word) => {
-    const filePath = word.replace(/['"]/g, "");
-    return filePath.startsWith("/") && !insideFolder(filePath, cwd);
-  });
-  return !outside && bare.split("|").every((part) => READ_COMMAND.test(part.trim()));
-}
-
-/** Prompt lines that match what readOnlyAnswer allows. */
-export const READ_ONLY_RULES = [
-  "Read and search only. Do not create, edit, or delete files.",
-  "To find files, use your read and search tools, or these shell commands, one at a time and",
-  "without redirection: ls, find, rg, grep, cat, head, tail, wc, git ls-files, git grep.",
-  "Keep paths inside this folder. Other commands are denied.",
-  "Work alone: do not start subagents or background tasks.",
-];
-
-const DENIED =
-  "Not allowed in this read-only run. Read and search files in this repository only, one " +
-  "command at a time, without redirection.";
-
-/** No one watches internal agents, so the plugin answers their prompts: reads yes, else no. */
-export function readOnlyAnswer(request: PermissionRequest, cwd: string): PermissionAnswer {
-  if (request.kind === "question") {
-    return { behavior: "deny", message: "No one can answer here. Decide yourself and continue." };
-  }
-  const detail = request.detail;
-  const command =
-    detail?.type === "shell" ? detail.command : (request.input as { command?: unknown })?.command;
-  const allowed =
-    request.kind === "tool" &&
-    ((detail?.type === "read" && insideFolder(detail.filePath, cwd)) ||
-      (detail?.type === "search" && detail.toolName !== "web_search") ||
-      (typeof command === "string" && readOnlyCommand(command, cwd)));
-  return allowed ? { behavior: "allow" } : { behavior: "deny", message: DENIED };
 }
 
 function entriesOf(snapshot: unknown): readonly SnapshotEntry[] {
