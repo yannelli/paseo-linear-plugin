@@ -1,6 +1,6 @@
-import { realpathSync } from "node:fs";
 import path from "node:path";
 import type { PermissionAnswer, PermissionRequest } from "./agent-runs";
+import { expandGlob, physicalPath, realPath, type ShellWord, shellWords } from "./shell-words";
 
 // Some Claude builds search only through the shell, so internal agents may run a short list of
 // commands that read. The check splits a command into the words the shell passes on, so quotes
@@ -42,76 +42,109 @@ function unsafeFlag(program: string, word: string): boolean {
   return [...(rule.short ?? "")].some((letter) => word.includes(letter));
 }
 
-/** Text the shell would expand or treat as syntax when it is not quoted. */
-const SHELL_SYNTAX = /[`$;&<>(){}~*?[\]#!\n\r]/;
+/** How a search program reads its flags, so the check knows which word is the pattern. */
+interface SearchFlags {
+  /** Short options without a value. */
+  plain: string;
+  /** Short options that always take a value. */
+  value: string;
+  /** Long options without a value, and long options that always take one. */
+  plainLong: readonly string[];
+  valueLong: readonly string[];
+}
 
-/** The words of each command in a pipeline, or null for syntax this check does not model. */
-export function shellWords(command: string): string[][] | null {
-  const commands: string[][] = [[]];
-  let word: string | null = null;
-  const end = () => {
-    if (word !== null) commands[commands.length - 1]?.push(word);
-    word = null;
-  };
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command[index] as string;
-    if (char === " " || char === "\t") end();
-    else if (char === "|") {
-      end();
-      commands.push([]);
-    } else if (char === "'") {
-      const close = command.indexOf("'", index + 1);
-      if (close < 0) return null;
-      word = (word ?? "") + command.slice(index + 1, close);
-      index = close;
-    } else if (char === '"') {
-      let text = "";
-      for (index += 1; command[index] !== '"'; index += 1) {
-        const inner = command[index];
-        if (inner === undefined || inner === "$" || inner === "`") return null;
-        const next = command[index + 1];
-        if (inner === "\\" && next !== undefined && '$`"\\'.includes(next)) {
-          text += next;
-          index += 1;
-        } else text += inner;
+const DIGITS = "0123456789";
+const SEARCH_FLAGS: Record<string, SearchFlags> = {
+  rg: {
+    plain: "0abcHhiIlnNopqsSUuvVwxz.PF",
+    value: "ABCdEgjMmrtT",
+    plainLong: [
+      "ignore-case", "smart-case", "case-sensitive", "line-number", "no-line-number", "word-regexp",
+      "line-regexp", "files-with-matches", "files-without-match", "count", "count-matches",
+      "invert-match", "only-matching", "fixed-strings", "hidden", "no-ignore", "no-ignore-vcs",
+      "no-heading", "heading", "with-filename", "no-filename", "column", "vimgrep", "json",
+      "multiline", "pcre2", "text", "trim", "stats", "null", "pretty", "quiet", "no-messages",
+    ],
+    valueLong: ["glob", "iglob", "type", "type-not", "max-count", "max-depth", "after-context", "before-context", "context"],
+  },
+  grep: {
+    plain: `${DIGITS}abcEFGHhiIlLnoPqrsTUuvVwxyZz`,
+    value: "ABCdDm",
+    plainLong: [
+      "recursive", "line-number", "ignore-case", "files-with-matches", "files-without-match",
+      "word-regexp", "line-regexp", "invert-match", "count", "only-matching", "extended-regexp",
+      "fixed-strings", "basic-regexp", "perl-regexp", "with-filename", "no-filename", "no-messages",
+      "quiet", "silent", "text", "null", "null-data", "byte-offset", "color", "colour",
+    ],
+    valueLong: ["include", "exclude", "exclude-dir", "max-count"],
+  },
+  "git grep": {
+    plain: `${DIGITS}acEFGHhiIlLnopPqrvwWz`,
+    value: "ABCm",
+    plainLong: [
+      "line-number", "ignore-case", "files-with-matches", "name-only", "files-without-match",
+      "word-regexp", "invert-match", "count", "only-matching", "extended-regexp", "fixed-strings",
+      "basic-regexp", "perl-regexp", "cached", "untracked", "no-index", "full-name", "heading",
+      "break", "show-function", "function-context", "text", "null", "quiet", "column", "color",
+    ],
+    valueLong: ["max-depth", "after-context", "before-context", "max-count"],
+  },
+};
+
+/** -e, -f, and their long names make every operand a path. GNU tools also take a prefix. */
+function namesPatterns(text: string): boolean {
+  if (/^-[^-]/.test(text)) return /[ef]/.test(text);
+  const name = text.slice(2).split("=")[0] ?? "";
+  return text.startsWith("--") && name !== "" && ["regexp", "file", "files", "type-list"].some((long) => long.startsWith(name));
+}
+
+/**
+ * Indexes of the words a search program reads as patterns, which need no path check. It reads
+ * flags from the left and stops at the first one it does not know, so later words keep the check.
+ */
+function patternWords(program: string, args: readonly ShellWord[]): Set<number> {
+  const flags = SEARCH_FLAGS[program];
+  const patterns = new Set<number>();
+  if (!flags) return patterns;
+  const end = args.findIndex((word) => word.text === "--");
+  const explicit = args.slice(0, end < 0 ? args.length : end).some((word) => namesPatterns(word.text));
+  for (let index = 0; index < args.length; index += 1) {
+    const { text, glob } = args[index] as ShellWord;
+    if (glob !== null) return patterns;
+    if (text === "--") {
+      if (!explicit && args[index + 1]?.glob === null) patterns.add(index + 1);
+      return patterns;
+    }
+    if (text.startsWith("--")) {
+      const name = text.slice(2).split("=")[0] ?? "";
+      if (name === "regexp") {
+        if (text.includes("=")) patterns.add(index);
+        else patterns.add(++index);
+      } else if (flags.valueLong.includes(name) && !text.includes("=")) index += 1;
+      else if (!text.includes("=") && !flags.plainLong.includes(name)) return patterns;
+      continue;
+    }
+    if (text.startsWith("-") && text.length > 1) {
+      for (let at = 1; at < text.length; at += 1) {
+        const letter = text[at] as string;
+        if (flags.plain.includes(letter)) continue;
+        const attached = at + 1 < text.length;
+        if (letter === "e") patterns.add(attached ? index : index + 1);
+        else if (letter !== "f" && !flags.value.includes(letter)) return patterns;
+        if (!attached) index += 1;
+        break;
       }
-      word = (word ?? "") + text;
-    } else if (char === "\\") {
-      const next = command[index + 1];
-      if (next === undefined || next === "\n" || next === "\r") return null;
-      word = (word ?? "") + next;
-      index += 1;
-    } else if (SHELL_SYNTAX.test(char)) return null;
-    else word = (word ?? "") + char;
+      continue;
+    }
+    if (!explicit) patterns.add(index);
+    return patterns;
   }
-  end();
-  return commands.every((words) => words.length > 0) ? commands : null;
+  return patterns;
 }
 
-/** The path relative to the folder, or null when it leaves the folder. */
-function relativePath(filePath: string, cwd: string): string | null {
-  let value = filePath.trim().replace(/\\/g, "/");
-  const root = cwd.trim().replace(/\\/g, "/").replace(/\/+$/, "");
-  if (root && value.startsWith(`${root}/`)) value = value.slice(root.length + 1);
-  else if (value.startsWith("/") || /^[A-Za-z]:\//.test(value)) return null;
-  value = value.replace(/^(\.\/)+/, "");
-  if (!value || value.split("/").includes("..")) return null;
-  return value;
-}
-
-function realPath(filePath: string): string | null {
-  try {
-    return realpathSync(filePath);
-  } catch {
-    return null;
-  }
-}
-
-/** False when the path is outside the folder, also through a link. A missing path cannot leak. */
+/** False when the path exists outside the folder, also through a link. A missing path cannot leak. */
 function insideFolder(filePath: string, cwd: string): boolean {
-  const same = filePath.replace(/\/+$/, "") === cwd.replace(/\/+$/, "");
-  if (!same && relativePath(filePath, cwd) === null) return false;
-  const real = realPath(path.resolve(cwd, filePath));
+  const real = physicalPath(filePath, cwd);
   if (real === null) return true;
   const relative = path.relative(realPath(cwd) ?? path.resolve(cwd), real);
   return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
@@ -129,15 +162,34 @@ function leavesFolder(program: string, word: string, cwd: string): boolean {
   return outside(word) || outside(value);
 }
 
+const allowedWord = (program: string, text: string, cwd: string) =>
+  !unsafeFlag(program, text) && !leavesFolder(program, text, cwd);
+
+/** A pattern word: only the flag letters in front of an attached -e pattern are checked. */
+function allowedPattern(program: string, text: string): boolean {
+  if (!/^-[^-]/.test(text)) return true;
+  return !unsafeFlag(program, text.slice(0, text.indexOf("e") + 1));
+}
+
 export function readOnlyCommand(command: string, cwd: string): boolean {
   const commands = shellWords(command.replace(/\s2>\s*\/dev\/null/g, " ").trim());
   if (!commands) return false;
-  return commands.every(([first = "", ...rest]) => {
-    const git = first === "git";
-    if (git ? !GIT_COMMANDS.has(rest[0] ?? "") : !PROGRAMS.has(first)) return false;
-    const program = git ? `git ${rest[0]}` : first;
-    const args = git ? rest.slice(1) : rest;
-    return args.every((word) => !unsafeFlag(program, word) && !leavesFolder(program, word, cwd));
+  return commands.every((words) => {
+    const [first, second] = words;
+    if (!first || first.glob !== null) return false;
+    const git = first.text === "git";
+    if (git ? second?.glob !== null || !GIT_COMMANDS.has(second.text) : !PROGRAMS.has(first.text)) return false;
+    const program = git ? `git ${second?.text}` : first.text;
+    const args = words.slice(git ? 2 : 1);
+    const patterns = patternWords(program, args);
+    return args.every((word, index) => {
+      if (patterns.has(index)) return allowedPattern(program, word.text);
+      if (word.glob === null) return allowedWord(program, word.text, cwd);
+      // The shell passes the matches, or the word itself when nothing matches.
+      const matches = expandGlob(word.glob, cwd);
+      if (matches === null) return false;
+      return (matches.length > 0 ? matches : [word.text]).every((text) => allowedWord(program, text, cwd));
+    });
   });
 }
 
@@ -146,14 +198,13 @@ export const READ_ONLY_RULES = [
   "Read and search only. Do not create, edit, or delete files.",
   "To find files, use your read and search tools, or these shell commands, one at a time and",
   "without redirection: ls, find, rg, grep, cat, head, tail, wc, git ls-files, git grep.",
-  "Quote wildcards, such as find . -name '*.ts'. Keep paths inside this folder.",
-  "Other commands are denied.",
+  "Keep paths inside this folder. Other commands are denied.",
   "Work alone: do not start subagents or background tasks.",
 ];
 
 const DENIED =
   "Not allowed in this read-only run. Read and search files in this repository only, one " +
-  "command at a time, without redirection or unquoted wildcards.";
+  "command at a time, without redirection.";
 
 /** No one watches internal agents, so the plugin answers their prompts: reads yes, else no. */
 export function readOnlyAnswer(request: PermissionRequest, cwd: string): PermissionAnswer {
