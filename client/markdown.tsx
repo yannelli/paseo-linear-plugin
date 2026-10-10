@@ -2,7 +2,6 @@ import { openExternalUrl } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { type ReactNode, useCallback, useMemo } from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
   type StyleProp,
@@ -17,16 +16,11 @@ import {
   parseMarkdown,
   taskItems,
 } from "../shared/markdown";
-import type { Theme } from "./ui";
+import { MONO, type Theme } from "./ui";
 
 type ListBlock = Extract<MarkdownBlock, { type: "list" }>;
 type TableBlock = Extract<MarkdownBlock, { type: "table" }>;
 
-const MONO = Platform.select({
-  ios: "Menlo",
-  android: "monospace",
-  default: "ui-monospace, SFMono-Regular, Menlo, monospace",
-});
 const LINE_HEIGHT = 21;
 const HEADING_SIZES = [20, 18, 16, 15, 14, 14];
 const COMPACT_HEADING_SIZES = [18, 16, 15, 14, 14, 14];

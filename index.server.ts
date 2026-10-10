@@ -5,9 +5,6 @@ import { registerAgentTools } from "./server/agent-tools";
 import { createCredentialStore, defaultCredentialPath } from "./server/credentials";
 import { registerHandlers } from "./server/handlers";
 import { registerInit } from "./server/init";
-import { createKnowledge, registerKnowledge } from "./server/knowledge";
-import { registerLive } from "./server/live";
-import { createLaunchQueue, createMapStore } from "./server/stores";
 import { registerSync } from "./server/sync";
 import { accessRpc, type LinearSettings, linearSettings } from "./shared/settings";
 
@@ -22,13 +19,8 @@ export default function contribute(server: PluginServerContext) {
     credentials: createCredentialStore({ file: credentialPath }),
   });
   const dataDirectory = path.dirname(credentialPath);
-  const maps = createMapStore(path.join(dataDirectory, "live-maps.json"));
-  const launches = createLaunchQueue(path.join(dataDirectory, "pending-launches.json"));
-  const knowledge = createKnowledge(path.join(dataDirectory, "knowledge"));
-  registerKnowledge(server, knowledge);
-  registerLive(server, { access, maps, launches, knowledge, readSettings });
   registerSync(server, { access, readSettings });
-  registerInit(server, { readSettings, knowledge });
+  registerInit(server, { readSettings });
   registerAgentHooks(server, dataDirectory);
   const closeTools = registerAgentTools(server, { access, dataDirectory, readSettings });
   server.handle(accessRpc, async () => {

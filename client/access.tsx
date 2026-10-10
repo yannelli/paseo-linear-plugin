@@ -1,5 +1,5 @@
-import { type PluginAgentPanelProps, useSettings, useWorkspace } from "@getpaseo/plugin/client";
-import { type ComponentType, type ReactNode, useEffect } from "react";
+import { useSettings } from "@getpaseo/plugin/client";
+import { type ReactNode, useEffect } from "react";
 import { linearSettings, type ProjectAccess, projectEnabled } from "../shared/settings";
 import { PluginIcon } from "./plugin-icon";
 import { EmptyState, type Theme } from "./ui";
@@ -50,18 +50,4 @@ export function ProjectGate(props: {
       detail="Turn it on in Linear settings, under Projects."
     />
   );
-}
-
-const selectProjectId = (workspace: { projectId: string }) => workspace.projectId;
-
-/** Wraps an agent panel so it shows the off state in projects where Linear is off. */
-export function gateAgentPanel(Panel: ComponentType<PluginAgentPanelProps>) {
-  return function GatedAgentPanel(props: PluginAgentPanelProps) {
-    const projectId = useWorkspace(props.workspaceId, selectProjectId);
-    return (
-      <ProjectGate theme={props.theme} projectId={projectId}>
-        <Panel {...props} />
-      </ProjectGate>
-    );
-  };
 }

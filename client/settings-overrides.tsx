@@ -127,7 +127,7 @@ export function ProjectOverridesSection(props: {
       </SettingsSection>
       <SettingsSection title="Linear tools and sync for this project">
         <SettingsCard>
-          {toggle("syncTodos", "Update Linear from agent todos", values.live.syncTodos, {
+          {toggle("syncTodos", COPY.syncTodos.label, values.sync.todos, {
             hint: "After each turn, todos that start with a sub-issue key move that sub-issue forward.",
           })}
           {toggle("tools", COPY.enabled.label, values.tools.enabled, { hint: COPY.enabled.hint })}

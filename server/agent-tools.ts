@@ -27,7 +27,7 @@ import { lastReply, type Paseo } from "./agent-runs";
 import type { LinearAccess } from "./handlers";
 import { createMcpServer, listenLocal, type McpTool, tool } from "./mcp-http";
 import type { LinearService } from "./queries";
-import { createJsonFile } from "./stores";
+import { createJsonFile } from "./json-file";
 
 // Each launch gets a grant: a random token for the agent's MCP config, and the issue tree it
 // reaches. The file keeps the port and a hash of each token, never the token, so agents keep

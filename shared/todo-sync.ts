@@ -1,4 +1,6 @@
-import type { WorkflowState } from "./linear";
+import { defineRpc } from "@getpaseo/plugin";
+import { z } from "zod";
+import { type WorkflowState, WorkflowStateSchema } from "./linear";
 
 // Claude and Codex todos share one timeline shape. Codex ids are list positions, so todos
 // map to issues by a key prefix in their text, such as "ENG-124: add the queue".
@@ -21,7 +23,16 @@ export interface KeyProgress {
 const KEY_PREFIX =
   /^\s*(?:[-*]\s+)?(?:\[([A-Za-z][A-Za-z0-9]*-\d+)\]\s*:?|([A-Za-z][A-Za-z0-9]*-\d+)\s*(?::|-\s))/;
 
-export function todoStatus(item: TodoLike): TodoStatus {
+/** The agent's latest todo list in its timeline, or null when it has none. */
+export function latestTodos(items: readonly { type: string; items?: unknown }[]): TodoLike[] | null {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.type === "todo" && Array.isArray(item.items)) return item.items as TodoLike[];
+  }
+  return null;
+}
+
+function todoStatus(item: TodoLike): TodoStatus {
   return item.status ?? (item.completed ? "completed" : "pending");
 }
 
@@ -29,12 +40,6 @@ export function todoKey(text: string): string | null {
   const match = KEY_PREFIX.exec(text);
   const key = match?.[1] ?? match?.[2];
   return key ? key.toUpperCase() : null;
-}
-
-/** Strips the key prefix so a todo reads as plain text under its issue. */
-export function todoLabel(text: string): string {
-  const match = KEY_PREFIX.exec(text);
-  return match ? text.slice(match[0].length).trim() || text : text;
 }
 
 export function progressByKey(items: readonly TodoLike[]): Map<string, KeyProgress> {
@@ -156,3 +161,15 @@ export function todoConventionLine(children: readonly { identifier: string }[]):
     `Start each todo with its sub-issue key, for example "${first.identifier}: <task>".`,
   ].join(" ");
 }
+
+export const SyncMoveSchema = z.object({
+  identifier: z.string(),
+  from: WorkflowStateSchema,
+  to: WorkflowStateSchema,
+});
+
+export const syncNowRpc = defineRpc({
+  name: "linear.sync.now",
+  input: z.object({ agentId: z.string().min(1) }),
+  output: z.object({ moves: z.array(SyncMoveSchema), skipped: z.string().nullable() }),
+});

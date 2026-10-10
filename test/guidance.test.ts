@@ -61,7 +61,7 @@ describe("guidance in the prompt", () => {
   it("applies a project's own values over the values for all projects", () => {
     const values = linearSettings.schema.parse({
       launch: { provider: "claude/opus", includeComments: false },
-      live: { syncTodos: true },
+      sync: { todos: true },
       projects: [
         {
           projectId: "p1",

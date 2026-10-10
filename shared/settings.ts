@@ -84,9 +84,6 @@ export function withProjectGuidance(
   return { ...values, projects: upsertProject(values, { ...(known ?? emptyProjectConfig(project)), guidance }) };
 }
 
-export const MAPPING_MODES = ["semantic", "explore"] as const;
-export type MappingMode = (typeof MAPPING_MODES)[number];
-
 export const linearSettings = defineSettings({
   id: "linear",
   scope: "host",
@@ -105,18 +102,8 @@ export const linearSettings = defineSettings({
         assignToMe: z.boolean().default(true),
       })
       .prefault({}),
-    // Explore runs cost provider usage and sync writes to Linear, so both start off.
-    live: z
-      .object({
-        enabled: z.boolean().default(true),
-        mapping: z.enum(MAPPING_MODES).default("semantic"),
-        exploreProvider: z.string().default(""),
-        /** Thinking option of the explore model; empty is the model's default. */
-        exploreEffort: z.string().default(""),
-        syncTodos: z.boolean().default(false),
-        issuesCollapsed: z.boolean().default(false),
-      })
-      .prefault({}),
+    // Sync writes to Linear, so it starts off.
+    sync: z.object({ todos: z.boolean().default(false) }).prefault({}),
     tools: ToolSettingsSchema.prefault({}),
     // Where the plugin works: every project, minus or plus per-project switches.
     access: z
@@ -151,7 +138,7 @@ export function projectDefaults(values: LinearSettings, projectId: string | null
       moveToStarted: own.moveToStarted ?? launch.moveToStarted,
       assignToMe: own.assignToMe ?? launch.assignToMe,
     },
-    syncTodos: own.syncTodos ?? values.live.syncTodos,
+    syncTodos: own.syncTodos ?? values.sync.todos,
     tools: {
       enabled: own.tools ?? tools.enabled,
       allowEdits: own.allowEdits ?? tools.allowEdits,

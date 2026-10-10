@@ -1,12 +1,10 @@
 import { randomUUID } from "node:crypto";
 import type { PluginHandlerContext, PluginLifecycleEvents } from "@getpaseo/plugin/server";
 import { type ZodType, z } from "zod";
-import { relativePath } from "../shared/activity";
-import type { Job } from "../shared/live";
-import { lastJsonObject } from "../shared/live";
+import type { Job } from "../shared/project-setup";
 
-// Explore and project setup run a read-only agent, wait for it in the background, and read a
-// JSON answer from its last message. Claude ignores outputSchema, so the prompt asks for JSON.
+// Project setup runs a read-only agent, waits for it in the background, and reads a JSON
+// answer from its last message. Claude ignores outputSchema, so the prompt asks for JSON.
 
 export type Paseo = PluginHandlerContext["paseo"];
 type WorkspaceHandle = Awaited<ReturnType<Paseo["workspaces"]["open"]>>;
@@ -20,8 +18,6 @@ export interface InternalRun<T> {
   /** Folder the agent works in; its reads must stay inside. */
   cwd: string;
   provider: string;
-  /** Thinking option for the model in `provider`; ignored when another model runs. */
-  effort?: string;
   title: string;
   prompt: string;
   labels: Record<string, string>;
@@ -79,6 +75,17 @@ const UNSAFE_SHELL =
   /[`;&<>~$\n\r]|\.\.|\s-(?:exec|execdir|ok|okdir|delete|fprint\w*|fls|O)\b|\s--(?:pre|open-files-in-pager)\b/;
 /** Quoted text the shell does not expand: single quotes, or double quotes without $ or `. */
 const LITERAL = /'[^']*'|"[^"$`\\]*"/g;
+
+/** The path relative to the folder, or null when it leaves the folder. */
+function relativePath(filePath: string, cwd: string): string | null {
+  let value = filePath.trim().replace(/\\/g, "/");
+  const root = cwd.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (root && value.startsWith(`${root}/`)) value = value.slice(root.length + 1);
+  else if (value.startsWith("/") || /^[A-Za-z]:\//.test(value)) return null;
+  value = value.replace(/^(\.\/)+/, "");
+  if (!value || value.split("/").includes("..")) return null;
+  return value;
+}
 
 function insideFolder(filePath: string, cwd: string): boolean {
   return filePath.replace(/\/+$/, "") === cwd.replace(/\/+$/, "") || relativePath(filePath, cwd) !== null;
@@ -146,6 +153,24 @@ export async function agentConfigFor(paseo: Paseo, preferred: string) {
   return { provider, ...(modeId ? { modeId } : {}) };
 }
 
+/** Parses the last JSON object in an agent reply: a fenced block, the whole text, or braces. */
+export function lastJsonObject(reply: string): unknown {
+  const fences = [...reply.matchAll(/```(?:json)?\s*\n([\s\S]*?)```/g)].reverse();
+  const candidates = [...fences.map((match) => match[1] ?? ""), reply.trim()];
+  const start = reply.indexOf("{");
+  const end = reply.lastIndexOf("}");
+  if (start >= 0 && end > start) candidates.push(reply.slice(start, end + 1));
+  for (const candidate of candidates) {
+    try {
+      const value: unknown = JSON.parse(candidate);
+      if (value && typeof value === "object" && !Array.isArray(value)) return value;
+    } catch {
+      // Not JSON; try the next candidate.
+    }
+  }
+  return null;
+}
+
 export async function lastReply(handle: AgentHandle) {
   const page = await handle.timeline.refetch({
     direction: "tail",
@@ -202,7 +227,7 @@ export async function waitUntilIdle(handle: AgentHandle, cwd: string, timeoutMs:
 }
 
 /** Waits for an internal agent, reads its JSON answer, and archives it either way. */
-export async function finishInternalRun<T>(
+async function finishInternalRun<T>(
   handle: AgentHandle,
   cwd: string,
   schema: ZodType<T>,
@@ -223,14 +248,8 @@ export interface StartedRun<T> {
   result: Promise<T>;
 }
 
-/** Adds the chosen effort only when the chosen model runs, not a fallback provider. */
-export function withEffort<C extends { provider: string }>(config: C, chosen: string, effort?: string) {
-  const applies = Boolean(effort) && chosen.includes("/") && config.provider === chosen;
-  return applies ? { ...config, thinkingOptionId: effort as string } : config;
-}
-
 export async function startInternalRun<T>(run: InternalRun<T>): Promise<StartedRun<T>> {
-  const config = withEffort(await agentConfigFor(run.paseo, run.provider), run.provider, run.effort);
+  const config = await agentConfigFor(run.paseo, run.provider);
   const handle = await run.workspace.agents.create({
     config,
     title: run.title,
@@ -244,56 +263,22 @@ export async function startInternalRun<T>(run: InternalRun<T>): Promise<StartedR
 
 export interface JobStore<T> {
   get(id: string): { job: Job; value: T | null } | null;
-  start(id: string | null, begin: () => Promise<StartedRun<T>>): Promise<Job>;
-  /** Resolves with the job once it is done or failed; null for an unknown id. */
-  wait(id: string): Promise<Job | null>;
-  /** Drops a finished job, so the next start makes a new run. A running job is kept. */
-  forget(id: string): void;
-}
-
-interface JobRecord<T> {
-  job: Job;
-  value: T | null;
-  settled: Promise<void>;
+  start(begin: () => Promise<StartedRun<T>>): Promise<Job>;
 }
 
 export function createJobStore<T>(): JobStore<T> {
-  const jobs = new Map<string, JobRecord<T>>();
+  const jobs = new Map<string, { job: Job; value: T | null }>();
   return {
-    get: (id) => {
-      const record = jobs.get(id);
-      return record ? { job: record.job, value: record.value } : null;
-    },
-    forget(id) {
-      if (jobs.get(id)?.job.status !== "running") jobs.delete(id);
-    },
-    async wait(id) {
-      const record = jobs.get(id);
-      if (!record) return null;
-      await record.settled;
-      return record.job;
-    },
-    async start(id, begin) {
-      const job: Job = {
-        id: id ?? randomUUID(),
-        status: "running",
-        agentId: null,
-        error: null,
-        startedAt: new Date().toISOString(),
+    get: (id) => jobs.get(id) ?? null,
+    async start(begin) {
+      const record: { job: Job; value: T | null } = {
+        job: { id: randomUUID(), status: "running", agentId: null, error: null, startedAt: new Date().toISOString() },
+        value: null,
       };
-      let settle = () => {};
-      const settled = new Promise<void>((resolve) => {
-        settle = resolve;
-      });
-      const record: JobRecord<T> = { job, value: null, settled };
-      jobs.set(job.id, record);
+      jobs.set(record.job.id, record);
       const fail = (error: unknown) => {
-        record.job = {
-          ...record.job,
-          status: "failed",
-          error: error instanceof Error ? error.message : String(error),
-        };
-        settle();
+        const message = error instanceof Error ? error.message : String(error);
+        record.job = { ...record.job, status: "failed", error: message };
       };
       try {
         const started = await begin();
@@ -301,7 +286,6 @@ export function createJobStore<T>(): JobStore<T> {
         started.result.then((value) => {
           record.value = value;
           record.job = { ...record.job, status: "done" };
-          settle();
         }, fail);
       } catch (error) {
         fail(error);

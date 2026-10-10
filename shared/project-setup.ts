@@ -1,9 +1,41 @@
-import type { InitProposal } from "./live";
+import { defineRpc } from "@getpaseo/plugin";
+import { z } from "zod";
 import type { ProjectConfig } from "./settings";
 
-// A setup proposal shows only fields that change; accepted fields append to the prompts.
+// Project setup runs a read-only agent that reads the repository's guidelines and proposes
+// prompt changes. A proposal shows only fields that change; accepted fields append to the prompts.
+
+export const JobSchema = z.object({
+  id: z.string(),
+  status: z.enum(["running", "done", "failed"]),
+  agentId: z.string().nullable(),
+  error: z.string().nullable(),
+  startedAt: z.string(),
+});
+export type Job = z.infer<typeof JobSchema>;
+
+/** What the setup agent must return. */
+export const InitProposalSchema = z.object({
+  instructions: z.string().default(""),
+  steps: z.array(z.string()).default([]),
+  implement: z.string().default(""),
+  review: z.string().default(""),
+});
+export type InitProposal = z.infer<typeof InitProposalSchema>;
+
+export const initStartRpc = defineRpc({
+  name: "linear.init.start",
+  input: z.object({ projectId: z.string().min(1), rootPath: z.string().min(1) }),
+  output: z.object({ job: JobSchema }),
+});
+
+export const initStatusRpc = defineRpc({
+  name: "linear.init.status",
+  input: z.object({ jobId: z.string().min(1) }),
+  output: z.object({ job: JobSchema.nullable(), proposal: InitProposalSchema.nullable() }),
+});
+
 export type ProposalField = "instructions" | "steps" | "implement" | "review";
-type PromptProposal = Pick<InitProposal, ProposalField>;
 
 export interface FieldDiff {
   field: ProposalField;
@@ -12,7 +44,7 @@ export interface FieldDiff {
   proposed: string;
 }
 
-export function proposalDiffs(config: ProjectConfig, proposal: PromptProposal): FieldDiff[] {
+export function proposalDiffs(config: ProjectConfig, proposal: InitProposal): FieldDiff[] {
   const steps = proposal.steps.map((step) => step.trim()).filter(Boolean);
   const rows: FieldDiff[] = [
     {
@@ -44,7 +76,7 @@ export function proposalDiffs(config: ProjectConfig, proposal: PromptProposal): 
 }
 
 export function applyProposal(
-  proposal: PromptProposal,
+  proposal: InitProposal,
   fields: ReadonlySet<ProposalField>,
 ): Partial<ProjectConfig> {
   const patch: Partial<ProjectConfig> = {};

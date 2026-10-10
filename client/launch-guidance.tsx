@@ -29,7 +29,7 @@ const COPY: Record<(typeof GUIDANCE_KEYS)[number], { label: string; hint: string
   },
   paseoSubagents: {
     label: "Hand off work to Paseo agents",
-    hint: "The agent starts one Paseo agent for each sub-issue with the plugin's tools, on its own provider and model. Each one checks off its own items, and Linear Live shows its work.",
+    hint: "The agent starts one Paseo agent for each sub-issue with the plugin's tools, on its own provider and model. Each one checks off its own items.",
   },
 };
 

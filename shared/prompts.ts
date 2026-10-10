@@ -47,7 +47,7 @@ export interface IssueSnapshotOptions {
   includeComments: boolean;
 }
 
-export function issueSnapshot(issue: IssueDetail, options: IssueSnapshotOptions): string {
+function issueSnapshot(issue: IssueDetail, options: IssueSnapshotOptions): string {
   const lines = [
     `Linear issue ${issue.identifier}: ${issue.title}`,
     `URL: ${issue.url}`,
@@ -145,7 +145,7 @@ export function guidanceSections(issue: IssueDetail, guidance: Guidance, tools: 
     const lines = [
       "Keep Linear current while you work:",
       `- Start each todo with the issue key it is for, such as "${example}: add the form".`,
-      "- Mark a todo in progress when you start it and completed when it is done. Linear Live moves the issue from these todos.",
+      "- Mark a todo in progress when you start it and completed when it is done.",
     ];
     if (edits) {
       lines.push(
@@ -243,7 +243,6 @@ export const AGENT_LABELS = {
   action: "linear.action",
   /** The Paseo project whose Linear key loaded the issue. */
   project: "linear.project",
-  explore: "linear.explore",
   init: "linear.init",
   /** The grant of the agent's Linear MCP tools, so a tool call can find its agent. */
   tools: "linear.tools",
@@ -251,7 +250,7 @@ export const AGENT_LABELS = {
   startedBy: "linear.started-by",
 } as const;
 
-/** Agents the plugin starts for itself: explore and project setup. */
+/** Agents the plugin starts for itself: project setup. */
 export function isInternalAgent(labels: Readonly<Record<string, string>> | undefined): boolean {
-  return Boolean(labels?.[AGENT_LABELS.explore] || labels?.[AGENT_LABELS.init]);
+  return Boolean(labels?.[AGENT_LABELS.init]);
 }

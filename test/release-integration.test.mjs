@@ -173,7 +173,7 @@ test("the alpha branch publishes alpha prereleases with their own numbers", asyn
   const publish = () => execute(process.execPath, [script, "--publish"], { cwd, env });
   await publish();
   git("checkout", "-b", "beta");
-  git("commit", "--allow-empty", "-m", "feat: add the map");
+  git("commit", "--allow-empty", "-m", "feat: add the queue");
   await publish();
   git("checkout", "-b", "alpha");
   git("commit", "--allow-empty", "-m", "feat: add agent settings");

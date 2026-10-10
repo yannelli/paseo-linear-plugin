@@ -37,7 +37,7 @@ function listKey(query: IssueQuery) {
   return { teamId, assignee, status, query: text.trim(), sort, after };
 }
 
-/** Linear access for the sync, explore, and setup handlers. */
+/** Linear access for todo sync and the agent tools. */
 export interface LinearAccess {
   connect(projectId: ProjectId): Promise<{ linear: LinearService; fingerprint: string }>;
   mutate<T>(projectId: ProjectId, run: (linear: LinearService) => Promise<T>): Promise<T>;
