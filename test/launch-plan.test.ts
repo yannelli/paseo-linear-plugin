@@ -8,6 +8,8 @@ import {
   agentLabel,
   assignmentRecord,
   type LaunchRequest,
+  launchPrompt,
+  launchTools,
   needsLinearTools,
   openWorkspace,
   type Paseo,
@@ -15,6 +17,7 @@ import {
   resolvePlacement,
 } from "../client/launch-plan";
 import type { PaseoProjectOption } from "../client/queries";
+import { NO_TOOLS_NOTE } from "../shared/agent-tools";
 import { GuidanceSchema, linearSettings } from "../shared/settings";
 
 const project: PaseoProjectOption = {
@@ -98,6 +101,21 @@ describe("Linear tools at launch", () => {
     expect(needsLinearTools({ ...none, updateLinear: true }, tools, 0)).toBe(true);
     expect(needsLinearTools(none, tools, 1)).toBe(true);
     expect(needsLinearTools({ ...none, paseoSubagents: true }, { ...tools, enabled: false }, 2)).toBe(false);
+  });
+
+  it("reports tools that did not start, and tells the agent not to look for a key", async () => {
+    const minted = {
+      grantId: "g1",
+      server: { type: "http" as const, url: "http://127.0.0.1:1/mcp" },
+      toolPolicy: { preapproved: [] },
+    };
+    expect(await launchTools(async () => minted)).toEqual({ tools: minted, warning: null });
+    const failed = await launchTools(async () => {
+      throw new Error("Linear MCP could not start");
+    });
+    expect(failed).toEqual({ tools: null, warning: "The Linear tools did not start: Error: Linear MCP could not start" });
+    expect(launchPrompt("Fix it", failed.warning)).toBe(`Fix it\n\n${NO_TOOLS_NOTE}`);
+    expect(launchPrompt("Fix it", null)).toBe("Fix it");
   });
 
   it("names each chosen agent and keeps its config by issue key", () => {

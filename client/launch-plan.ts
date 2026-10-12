@@ -9,7 +9,7 @@ import {
   type WorkflowState,
 } from "../shared/linear";
 import { agentHooksRpc } from "../shared/agent-hooks";
-import { type Assignment, agentToolsRpc, TOOLS_SERVER } from "../shared/agent-tools";
+import { type Assignment, agentToolsRpc, NO_TOOLS_NOTE, TOOLS_SERVER } from "../shared/agent-tools";
 import { AGENT_LABELS, agentTitle } from "../shared/prompts";
 import type { AgentAction, Guidance, Isolation, LinearSettings, ToolSettings } from "../shared/settings";
 import { type AgentSelection, agentConfig, optionLabel } from "./agent-options";
@@ -184,6 +184,19 @@ export function withLinearTools<C extends object>(config: C, tools: Pick<AgentTo
 export const needsLinearTools = (guidance: Guidance, tools: ToolSettings, assignments: number) =>
   tools.enabled && (guidance.updateLinear || guidance.paseoSubagents || assignments > 0);
 
+/** The tools for the launch, or why they did not start. The agent starts either way. */
+export async function launchTools(prepare: () => Promise<AgentTools>): Promise<{ tools: AgentTools | null; warning: string | null }> {
+  try {
+    return { tools: await prepare(), warning: null };
+  } catch (error) {
+    return { tools: null, warning: `The Linear tools did not start: ${errorMessage(error)}` };
+  }
+}
+
+/** The prompt names tools the agent may not have, so it gets the note when they failed. */
+export const launchPrompt = (prompt: string, toolsWarning: string | null) =>
+  toolsWarning ? `${prompt}\n\n${NO_TOOLS_NOTE}` : prompt;
+
 /** The config with the issue's Claude Code hooks, loaded as a plugin with --plugin-dir. */
 export function withHookPlugin<C extends object>(config: C, pluginDir: string | null) {
   if (!pluginDir) return config;
@@ -288,22 +301,24 @@ export function useLaunchAgent() {
             }).catch(() => null)
           : null;
       const config = agentConfig(request.agent);
-      // Without the tools the agent still starts; its prompt then names tools it does not have.
-      const tools = needsLinearTools(request.guidance, request.tools, request.assignments.length)
-        ? await prepareTools({
-            root: issue.identifier,
-            home: issue.identifier,
-            keyScope: request.keyScope,
-            workspaceId: workspace.id,
-            projectId: request.project.projectId,
-            config,
-            ...(request.assignments.length > 0 ? { assignments: assignmentRecord(request.assignments) } : {}),
-          }).catch(() => null)
-        : null;
+      const prepared = needsLinearTools(request.guidance, request.tools, request.assignments.length)
+        ? await launchTools(() =>
+            prepareTools({
+              root: issue.identifier,
+              home: issue.identifier,
+              keyScope: request.keyScope,
+              workspaceId: workspace.id,
+              projectId: request.project.projectId,
+              config,
+              ...(request.assignments.length > 0 ? { assignments: assignmentRecord(request.assignments) } : {}),
+            }),
+          )
+        : { tools: null, warning: null };
+      const { tools } = prepared;
       const agent = {
         config: withLinearTools(withHookPlugin(config, hooks?.pluginDir ?? null), tools),
         title: agentTitle(action, issue),
-        prompt: request.prompt,
+        prompt: launchPrompt(request.prompt, prepared.warning),
         labels: {
           [AGENT_LABELS.issue]: issue.identifier,
           [AGENT_LABELS.action]: action,
@@ -320,15 +335,15 @@ export function useLaunchAgent() {
         effort: request.agent.effort?.id ?? null,
         mode: request.agent.mode?.id ?? null,
       });
-      let warning: string | null = null;
+      const warnings = prepared.warning ? [prepared.warning] : [];
       if (Object.keys(request.patch).length > 0) {
         try {
           await updateIssue({ id: issue.id, patch: request.patch, projectId: request.keyScope });
         } catch (error) {
-          warning = errorMessage(error);
+          warnings.push(`Linear was not updated: ${errorMessage(error)}`);
         }
       }
-      return { agentId, warning };
+      return { agentId, warnings };
     },
   });
 }

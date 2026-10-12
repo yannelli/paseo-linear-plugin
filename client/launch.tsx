@@ -291,10 +291,10 @@ function LaunchComposer(props: LaunchPageProps & { issue: IssueDetail; settings:
         assignments,
       },
       {
-        onSuccess: ({ agentId, warning }) => {
+        onSuccess: ({ agentId, warnings }) => {
           void queries.invalidateQueries({ queryKey: ["linear"] });
-          if (warning) {
-            toast.show(`Agent started. Linear was not updated: ${warning}`, { variant: "warning" });
+          if (warnings.length > 0) {
+            toast.show(`Agent started. ${warnings.join("; ")}`, { variant: "warning" });
           } else toast.show("Agent started.", { variant: "success" });
           onStarted();
           navigation?.openAgent({ agentId });

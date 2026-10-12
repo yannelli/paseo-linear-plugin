@@ -18,11 +18,15 @@ export const LIMIT_OPTIONS = LIMITS.map((limit) => ({ label: limitLabel(limit), 
 export const COPY = {
   enabled: {
     label: "Give agents the Linear tools",
-    hint: "Agents started from an issue get the plugin's linear MCP server when Keep Linear updated, Hand off work to Paseo agents, or sub-issue agents need it. When it is off, agents that have the server get no tools from it.",
+    hint: "Agents get the plugin's linear MCP server. Agents started from an issue get it when Keep Linear updated, Hand off work to Paseo agents, or sub-issue agents need it. When it is off, agents that have the server get no tools from it.",
+  },
+  allAgents: {
+    label: "Give every agent the Linear tools",
+    hint: "Agents not started from an issue, in a project with Linear on, get the tools for the project's Linear key. They can search and read any issue the key reaches, and change issues when that is allowed. They ask before a change unless their mode allows it.",
   },
   allowEdits: {
-    label: "Let agents edit issue descriptions",
-    hint: "The edit_issue tool, which checks off task list items and updates the plan. When it is off, agents can only read the issue and its sub-issues.",
+    label: "Let agents change issues",
+    hint: "The edit_issue, update_issue, comment_issue, and create_issue tools: descriptions, status, assignee, priority, title, comments, and new issues. When it is off, agents can only read issues.",
   },
   assignAgents: {
     label: "Choose agents for sub-issues",
@@ -67,6 +71,13 @@ function AgentEditor({ theme, settings }: { theme: Theme; settings: ReadySetting
             hint={COPY.enabled.hint}
             value={tools.enabled}
             onValueChange={(enabled) => change({ enabled })}
+          />
+          <SettingsSwitch
+            label={COPY.allAgents.label}
+            hint={COPY.allAgents.hint}
+            value={tools.allAgents}
+            disabled={!tools.enabled}
+            onValueChange={(allAgents) => change({ allAgents })}
           />
           <SettingsSwitch
             label={COPY.allowEdits.label}

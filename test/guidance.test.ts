@@ -23,13 +23,14 @@ const issue = {
 } as unknown as IssueDetail;
 
 describe("guidance in the prompt", () => {
-  it("adds one section per option, with the plugin's MCP tools and no comments", () => {
+  it("adds one section per option, with the plugin's MCP tools and comments only on request", () => {
     expect(guidanceSections(issue, NONE)).toEqual([]);
     const sections = guidanceSections(issue, ALL);
     expect(sections).toHaveLength(3);
     expect(sections[0]).toContain('"ENG-2: add the form"');
     expect(sections[0]).toContain("edit_issue");
-    expect(sections[0]).toContain("Do not post comments.");
+    expect(sections[0]).toContain("update_issue changes its status");
+    expect(sections[0]).toContain("Use comment_issue and create_issue only when the user asks.");
     expect(sections[2]).toContain("start_agent");
   });
 
@@ -74,7 +75,7 @@ describe("guidance in the prompt", () => {
     const own = projectDefaults(values, "p1");
     expect(own.launch).toEqual({ provider: "", isolation: "workspace", includeComments: false, moveToStarted: true, assignToMe: true });
     expect(own.syncTodos).toBe(false);
-    expect(own.tools).toEqual({ enabled: true, allowEdits: true, assignAgents: false, maxAgents: 0 });
+    expect(own.tools).toEqual({ enabled: true, allowEdits: true, allAgents: true, assignAgents: false, maxAgents: 0 });
     const shared = projectDefaults(values, "p2");
     expect(shared.launch.provider).toBe("claude/opus");
     expect(shared.syncTodos).toBe(true);

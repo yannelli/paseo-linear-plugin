@@ -131,6 +131,7 @@ export function ProjectOverridesSection(props: {
             hint: "After each turn, todos that start with a sub-issue key move that sub-issue forward.",
           })}
           {toggle("tools", COPY.enabled.label, values.tools.enabled, { hint: COPY.enabled.hint })}
+          {toggle("allAgents", COPY.allAgents.label, values.tools.allAgents, { disabled: !tools.enabled })}
           {toggle("allowEdits", COPY.allowEdits.label, values.tools.allowEdits, { disabled: !tools.enabled })}
           {toggle("assignAgents", COPY.assignAgents.label, values.tools.assignAgents, { disabled: !tools.enabled })}
           <OverrideSelect

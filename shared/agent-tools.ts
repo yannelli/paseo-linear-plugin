@@ -1,16 +1,25 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { IDENTIFIER } from "./agent-hooks";
-import type { IssueDetail } from "./linear";
+import { ASSIGNEE_FILTERS, type IssueDetail, STATUS_FILTERS } from "./linear";
 
-// The plugin's MCP server for agents started from an issue. It gives them Linear tools for
-// their issue tree and a way to start Paseo agents on its sub-issues. The daemon hosts it on
-// 127.0.0.1, and each agent gets its own bearer token.
+// The plugin's MCP server. Agents started from an issue get Linear tools for their issue tree
+// and a way to start Paseo agents on its sub-issues. Other agents in a project with Linear on
+// get Linear tools for the project's key. The daemon hosts it on 127.0.0.1 with bearer tokens.
 
 export const TOOLS_SERVER = "linear";
+/** Tools that change Linear. The allowEdits setting turns them on and off. */
+export const CHANGE_TOOLS = ["edit_issue", "update_issue", "comment_issue", "create_issue"] as const;
 /** Children get only the Linear tools, so agents never start agents of their own. */
-export const LINEAR_TOOLS = ["read_issue", "edit_issue"] as const;
+export const LINEAR_TOOLS = ["read_issue", ...CHANGE_TOOLS] as const;
 export const AGENT_TOOLS = ["start_agent", "wait_agent"] as const;
+/** Project tools reach any issue of the key, so they can search. */
+export const PROJECT_READ_TOOLS = ["read_issue", "search_issues"] as const;
+
+/** Tells agents where the Linear tools are, so they do not look for a CLI or an API key. */
+export const NO_TOOLS_NOTE =
+  "If you have no linear MCP tools, do not look for a Linear CLI or API key, and do not ask the user for one. Tell the user what to change in Linear instead.";
+export const TOOLS_INSTRUCTIONS = `These tools read and change Linear with the key that the Paseo Linear plugin keeps. Do not look for a Linear CLI or API key.`;
 
 export const McpHttpServerSchema = z.object({
   type: z.literal("http"),
@@ -51,6 +60,16 @@ export const ToolScopeSchema = z.object({
 });
 export type ToolScope = z.infer<typeof ToolScopeSchema>;
 
+/** The scope of agents not started from an issue: every issue the project's key reaches. */
+export interface ProjectScope {
+  kind: "project";
+  projectId: string;
+}
+
+export function isProjectScope(scope: ToolScope | ProjectScope): scope is ProjectScope {
+  return "kind" in scope && scope.kind === "project";
+}
+
 export const agentToolsRpc = defineRpc({
   name: "linear.agent.tools",
   input: ToolScopeSchema,
@@ -67,17 +86,56 @@ export function toolPolicy(tools: readonly string[]): z.infer<typeof ToolPolicyS
 }
 
 const IssueKey = z.string().regex(IDENTIFIER);
+const OptionalKey = IssueKey.optional().describe("Issue key, such as ENG-12. The default is the issue you work on.");
 
-export const ReadIssueInput = z.object({
-  issue: IssueKey.optional().describe("Issue key, such as ENG-12. The default is the issue you work on."),
-});
+export const ReadIssueInput = z.object({ issue: OptionalKey });
 
 export const EditIssueInput = z.object({
-  issue: IssueKey.optional().describe("Issue key, such as ENG-12. The default is the issue you work on."),
+  issue: OptionalKey,
   old_text: z
     .string()
     .describe("Exact text of the description to replace. It must occur one time. Use an empty string to add new_text at the end."),
   new_text: z.string().describe("The text that replaces old_text."),
+});
+
+const TeamKey = z.string().regex(/^[A-Za-z][A-Za-z0-9]*$/).describe("Team key, such as ENG.");
+const Priority = z.number().int().min(0).max(4).describe("0 no priority, 1 urgent, 2 high, 3 medium, 4 low.");
+const Status = z.string().trim().min(1).describe("Name of a status of the issue's team, such as In Progress or Done.");
+const Assignee = z
+  .string()
+  .trim()
+  .min(1)
+  .nullable()
+  .describe('"me", the name of a Linear user, or null for no assignee.');
+
+export const SearchIssuesInput = z.object({
+  query: z.string().default("").describe("Words in the title or description, or an issue key. Empty lists recent issues."),
+  status: z.enum(STATUS_FILTERS).default("active").describe("active, backlog, done, or all."),
+  assignee: z.enum(ASSIGNEE_FILTERS).default("anyone").describe("me, anyone, or unassigned."),
+  team: TeamKey.optional(),
+});
+
+export const UpdateIssueInput = z.object({
+  issue: OptionalKey,
+  status: Status.optional(),
+  assignee: Assignee.optional(),
+  priority: Priority.optional(),
+  title: z.string().trim().min(1).optional(),
+});
+
+export const CommentIssueInput = z.object({
+  issue: OptionalKey,
+  body: z.string().trim().min(1).describe("The comment in Markdown."),
+});
+
+export const CreateIssueInput = z.object({
+  title: z.string().trim().min(1),
+  description: z.string().optional().describe("The description in Markdown."),
+  parent: IssueKey.optional().describe("Key of the parent issue, to create a sub-issue. Its team is the default team."),
+  team: TeamKey.optional(),
+  status: Status.optional(),
+  assignee: Assignee.optional(),
+  priority: Priority.optional(),
 });
 
 export const StartAgentInput = z.object({
@@ -118,6 +176,8 @@ export function issueText(issue: IssueDetail): string {
   const lines = [
     `${issue.identifier}: ${issue.title}`,
     `Status: ${issue.state.name}`,
+    `Assignee: ${issue.assignee?.displayName ?? "none"}`,
+    `Priority: ${issue.priorityLabel}`,
     `URL: ${issue.url}`,
     tasks.total > 0 ? `Task list: ${tasks.done} of ${tasks.total} checked` : null,
     "",
@@ -137,12 +197,13 @@ export function childBrief(key: string, root: string, edits = true): string {
   const lines = [`You work on Linear issue ${key}${parent}. Start your first reply with "${key}:".`];
   if (edits) {
     lines.push(
-      `Use the ${TOOLS_SERVER} MCP tools: read_issue shows the issue, and edit_issue changes its description.`,
-      "Check off each task list item you finish by replacing `- [ ]` with `- [x]`. Do not post comments.",
+      `Use the ${TOOLS_SERVER} MCP tools: read_issue shows the issue, edit_issue changes its description, and update_issue changes its status, assignee, or priority.`,
+      "Check off each task list item you finish by replacing `- [ ]` with `- [x]`. Use comment_issue and create_issue only when you are asked to.",
     );
   } else {
     lines.push(`Use the ${TOOLS_SERVER} MCP tool read_issue to read the issue. Do not change the issue or post comments.`);
   }
+  lines.push(NO_TOOLS_NOTE);
   return lines.join("\n");
 }
 

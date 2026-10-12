@@ -9,7 +9,8 @@ import { createLinearGraphql } from "../server/graphql";
 import { createLinearIssueSearch } from "../server/linear";
 import { createLinearService, issueFilter } from "../server/queries";
 import type { IssueDetail } from "../shared/linear";
-import { composePrompt } from "../shared/prompts";
+import { NO_TOOLS_NOTE } from "../shared/agent-tools";
+import { ALL_TOOLS, composePrompt } from "../shared/prompts";
 import { emptyProjectConfig, linearSettings } from "../shared/settings";
 
 const issue = {
@@ -187,6 +188,12 @@ describe("agent prompts", () => {
     expect(composePrompt({ ...base, project: guided, guidance: none })).not.toContain("Paseo agents");
   });
 
+  it("tells agents without the Linear tools not to look for a Linear CLI or key", () => {
+    const base = { action: "implement" as const, issue: detail, settings, project: null, includeComments: false, extraInstructions: "" };
+    expect(composePrompt({ ...base, tools: { ...ALL_TOOLS, enabled: false } })).toContain(NO_TOOLS_NOTE);
+    expect(composePrompt({ ...base, tools: ALL_TOOLS })).not.toContain(NO_TOOLS_NOTE);
+  });
+
   it("renders the built-in implement prompt with the issue snapshot and branch", () => {
     const prompt = composePrompt({
       action: "implement",
@@ -263,7 +270,7 @@ describe("agent prompts", () => {
         assignToMe: true,
       },
       sync: { todos: false },
-      tools: { enabled: true, allowEdits: true, assignAgents: true, maxAgents: 0 },
+      tools: { enabled: true, allowEdits: true, allAgents: true, assignAgents: true, maxAgents: 0 },
       access: { allProjects: true, projects: {} },
       projects: [],
       icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false, menu: "SquareKanban" },
