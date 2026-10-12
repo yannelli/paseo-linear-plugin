@@ -34,10 +34,12 @@ const AgentLimit = z.number().int().min(0).max(MAX_AGENTS_LIMIT);
 
 /** The plugin's linear MCP server, and the agents its start_agent tool starts. */
 export const ToolSettingsSchema = z.object({
-  /** Agents started from an issue get the linear MCP server when their options need it. */
+  /** Agents get the linear MCP server: from an issue when their options need it, else allAgents. */
   enabled: z.boolean().default(true),
-  /** The edit_issue tool, which changes issue descriptions. */
+  /** The tools that change issues: edit_issue, update_issue, comment_issue, and create_issue. */
   allowEdits: z.boolean().default(true),
+  /** Agents not started from an issue get the tools for the project's Linear key. */
+  allAgents: z.boolean().default(true),
   /** The launch page offers an agent for each sub-issue. */
   assignAgents: z.boolean().default(true),
   /** Agents that one launch may run at the same time with start_agent; 0 has no limit. */
@@ -55,6 +57,7 @@ export const ProjectOverridesSchema = z.object({
   syncTodos: z.boolean().optional(),
   tools: z.boolean().optional(),
   allowEdits: z.boolean().optional(),
+  allAgents: z.boolean().optional(),
   assignAgents: z.boolean().optional(),
   maxAgents: AgentLimit.optional(),
 });
@@ -142,10 +145,16 @@ export function projectDefaults(values: LinearSettings, projectId: string | null
     tools: {
       enabled: own.tools ?? tools.enabled,
       allowEdits: own.allowEdits ?? tools.allowEdits,
+      allAgents: own.allAgents ?? tools.allAgents,
       assignAgents: own.assignAgents ?? tools.assignAgents,
       maxAgents: own.maxAgents ?? tools.maxAgents,
     },
   };
+}
+
+/** The tool settings for a project: its own values, then the values for all projects. */
+export function toolSettings(values: LinearSettings | null, projectId: string | null | undefined): ToolSettings {
+  return projectDefaults(values ?? linearSettings.schema.parse({}), projectId).tools;
 }
 
 export function emptyProjectConfig(project: {

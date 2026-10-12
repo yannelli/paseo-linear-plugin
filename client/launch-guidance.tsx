@@ -21,7 +21,7 @@ const DEFAULT_GUIDANCE = GuidanceSchema.parse({});
 const COPY: Record<(typeof GUIDANCE_KEYS)[number], { label: string; hint: string }> = {
   updateLinear: {
     label: "Keep Linear updated",
-    hint: "The agent edits the issue description and checks off task list items as it works, with the plugin's Linear tools. It posts no comments. Todos start with issue keys, so status sync can move each sub-issue.",
+    hint: "The agent edits the issue description and checks off task list items as it works, with the plugin's Linear tools. It comments or creates issues only when you ask. Todos start with issue keys, so status sync can move each sub-issue.",
   },
   subagentKeys: {
     label: "Subagents state their issue key",
@@ -56,7 +56,7 @@ function toolsHint(key: (typeof GUIDANCE_KEYS)[number], tools: ToolSettings): st
     return "This needs the plugin's Linear tools, which are off for this project. Turn them on in Linear settings, under Agents.";
   }
   if (key === "updateLinear" && !(tools.enabled && tools.allowEdits)) {
-    return "Todos start with issue keys, so status sync can move each sub-issue. The agent cannot edit the issue, because the Linear tools or description edits are off for this project.";
+    return "Todos start with issue keys, so status sync can move each sub-issue. The agent cannot change the issue, because the Linear tools or issue changes are off for this project.";
   }
   return null;
 }

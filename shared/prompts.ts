@@ -1,4 +1,4 @@
-import { TOOLS_SERVER } from "./agent-tools";
+import { NO_TOOLS_NOTE, TOOLS_SERVER } from "./agent-tools";
 import type { IssueDetail } from "./linear";
 import type { AgentAction, Guidance, LinearSettings, ProjectConfig } from "./settings";
 import { todoConventionLine } from "./todo-sync";
@@ -149,9 +149,9 @@ export function guidanceSections(issue: IssueDetail, guidance: Guidance, tools: 
     ];
     if (edits) {
       lines.push(
-        `- Use the ${TOOLS_SERVER} MCP tools: read_issue shows an issue, and edit_issue changes its description.`,
+        `- Use the ${TOOLS_SERVER} MCP tools: read_issue shows an issue, edit_issue changes its description, and update_issue changes its status, assignee, or priority.`,
         "- When you finish a task list item in a description, check it off: replace `- [ ] item` with `- [x] item`.",
-        "- When the plan changes, update the description. Do not post comments.",
+        "- When the plan changes, update the description. Use comment_issue and create_issue only when the user asks.",
       );
     } else if (tools.enabled) {
       lines.push(`- Use the ${TOOLS_SERVER} MCP tool read_issue to read an issue. Do not change descriptions or post comments.`);
@@ -227,6 +227,7 @@ export function composePrompt(input: ComposePromptInput): string {
   }
   const guidance = input.guidance ?? project?.guidance;
   if (guidance) sections.push(...guidanceSections(issue, guidance, input.tools));
+  if (input.tools && !input.tools.enabled) sections.push(NO_TOOLS_NOTE);
   const extra = input.extraInstructions.trim();
   if (extra) sections.push(`Additional instructions:\n${extra}`);
   return sections.join("\n\n");

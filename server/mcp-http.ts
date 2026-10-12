@@ -24,6 +24,8 @@ export function tool<S extends ZodType, C>(
 export interface McpOptions<C> {
   name: string;
   version: string;
+  /** Tells agents how to use the server. */
+  instructions?: string;
   tools: readonly McpTool<C>[];
   /** The caller for a bearer token, or null to refuse the request. */
   authorize(token: string): Promise<C | null>;
@@ -61,6 +63,7 @@ export async function answer<C>(options: McpOptions<C>, message: Message, caller
         protocolVersion: VERSIONS.includes(asked) ? asked : VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: options.name, version: options.version },
+        ...(options.instructions ? { instructions: options.instructions } : {}),
       });
     }
     case "ping":
