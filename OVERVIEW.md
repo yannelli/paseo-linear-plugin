@@ -39,7 +39,7 @@ In **Settings → Plugins → Linear → Icon**, choose an SVG file or paste SVG
 
 ## Update Linear from todos
 
-Turn on **Update Linear from agent todos** in **Agents**, or for one project in **Projects**. After each turn, a todo that starts with a sub-issue key, such as `ENG-124: add the queue`, moves that sub-issue to In Progress, and then to Done when all its todos are done. The parent moves to In Review when every sub-issue is done, never to Done. Statuses only move forward.
+Turn on **Update Linear from agent todos** in **Agents**, or for one project in **Projects**. After each turn, a sub-issue moves to In Progress when one of its todos is in progress or done, and to Done when all its todos are done. A todo belongs to a sub-issue when it starts with the sub-issue key, such as `ENG-124: add the queue`. The parent moves to In Review when every sub-issue is done, never to Done. Statuses only move forward.
 
 ## Set up project prompts
 

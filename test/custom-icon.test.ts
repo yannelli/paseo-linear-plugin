@@ -54,6 +54,11 @@ describe("parseIconSvg", () => {
       '<svg viewBox="0 0 1 1"><image xlink:href="data:image/png;base64,AAAA"/></svg>',
       '<svg viewBox="0 0 1 1"><path style="fill:url(https://example.test/p.svg#a)"/></svg>',
       '<svg viewBox="0 0 1 1"><style>@import "x.css";</style></svg>',
+      '<svg viewBox="0 0 1 1"><path style="fill:&#117;rl(https://example.test/p.svg#a)"/></svg>',
+      '<svg viewBox="0 0 1 1"><path style="fill:&#x75;rl(https://example.test/p.svg#a)"/></svg>',
+      '<svg viewBox="0 0 1 1"><path style="fill:u\\72l(https://example.test/p.svg#a)"/></svg>',
+      '<svg viewBox="0 0 1 1"><style>@\\69mport "x.css";</style></svg>',
+      '<svg viewBox="0 0 1 1"><image hr&#101;f="https://example.test/a.png"/></svg>',
     ];
     for (const text of blocked) expect(parseIconSvg(text), text).toHaveProperty("error");
   });

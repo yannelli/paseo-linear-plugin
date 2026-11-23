@@ -2,6 +2,7 @@ import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
 import { IDENTIFIER } from "./agent-hooks";
 import { ASSIGNEE_FILTERS, type IssueDetail, STATUS_FILTERS } from "./linear";
+import { parseMarkdown, taskItems } from "./markdown";
 
 // The plugin's MCP server. Agents started from an issue get Linear tools for their issue tree
 // and a way to start Paseo agents on its sub-issues. Other agents in a project with Linear on
@@ -164,10 +165,10 @@ export function editText(body: string, oldText: string, newText: string): { body
   return { body: body.slice(0, first) + newText + body.slice(first + oldText.length) };
 }
 
-/** Counts Markdown task list items, so a reply can say how many are done. */
+/** Counts the task list items the issue view shows, so a reply can say how many are done. */
 export function taskCount(body: string): { done: number; total: number } {
-  const items = [...body.matchAll(/^\s*[-*+] \[([ xX])\]/gm)];
-  return { done: items.filter((item) => item[1] !== " ").length, total: items.length };
+  const items = taskItems(parseMarkdown(body));
+  return { done: items.filter((item) => item.checked).length, total: items.length };
 }
 
 /** The issue as text for read_issue. */

@@ -76,6 +76,9 @@ export function registerHandlers(
       : { value: null, fetchedAt: null };
   }
 
+  // Counts finished edits per key, so a read that an edit overtook does not store its answer.
+  const edits = new Map<string, number>();
+
   async function fetchAndStore<T>(
     projectId: ProjectId,
     kind: string,
@@ -83,8 +86,9 @@ export function registerHandlers(
     load: (linear: LinearService) => Promise<T>,
   ): Promise<T> {
     const { linear, fingerprint } = await connect(projectId);
+    const before = edits.get(fingerprint) ?? 0;
     const value = await load(linear);
-    cache.set(cacheKey(fingerprint, kind, params), value);
+    if ((edits.get(fingerprint) ?? 0) === before) cache.set(cacheKey(fingerprint, kind, params), value);
     return value;
   }
 
@@ -94,6 +98,7 @@ export function registerHandlers(
     try {
       return await run(linear);
     } finally {
+      edits.set(fingerprint, (edits.get(fingerprint) ?? 0) + 1);
       cache.drop(`${fingerprint}:issues:`);
       cache.drop(`${fingerprint}:issue:`);
     }

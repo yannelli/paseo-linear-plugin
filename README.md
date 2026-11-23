@@ -240,6 +240,7 @@ Linear errors, such as a rejected key or a rate limit, show in the panel or as a
 | `shared/settings.ts` | Both | Settings schema: templates, agent defaults, Linear tools, and project settings with their own values |
 | `shared/prompts.ts` | Both | Default templates and the issue snapshot |
 | `shared/markdown.ts` | Both | Markdown parser and task list toggle |
+| `shared/key-queue.ts` | Both | Runs saves, edits, syncs, and agent starts for one key at a time |
 | `shared/agent-hooks.ts`, `server/agent-hooks.ts` | Both, Daemon | Claude Code hooks for agent guidance, and the plugin folder the daemon writes |
 | `shared/agent-tools.ts`, `server/agent-tools.ts`, `server/mcp-http.ts` | Both, Daemon | The `linear` MCP server: its tools, tokens, and HTTP transport |
 | `server/issue-tools.ts`, `server/project-tools.ts` | Daemon | The Linear tools of the MCP server, and the hook that gives them to every agent of a project |

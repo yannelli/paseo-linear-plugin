@@ -50,6 +50,20 @@ describe("credential scopes", () => {
     await store.clear("project-a");
     await expect(readFile(file, "utf8")).rejects.toThrow();
   });
+
+  it("keeps every key when saves run at the same time", async () => {
+    const file = path.join(directory, "credentials.json");
+    const store = createCredentialStore({ file, env: {} });
+    await Promise.all([
+      store.save("lin_api_default"),
+      store.save("lin_api_a", "project-a"),
+      store.save("lin_api_b", "project-b"),
+    ]);
+    expect(JSON.parse(await readFile(file, "utf8"))).toEqual({
+      apiKey: "lin_api_default",
+      projects: { "project-a": { apiKey: "lin_api_a" }, "project-b": { apiKey: "lin_api_b" } },
+    });
+  });
 });
 
 describe("Linear queries", () => {
@@ -98,15 +112,21 @@ describe("Linear queries", () => {
 
 type Handler = (input: unknown, context: unknown) => Promise<unknown>;
 
-async function withHandlers(run: (call: Call, keys: string[]) => Promise<void>) {
+async function withHandlers(
+  run: (call: Call, keys: string[]) => Promise<void>,
+  /** Holds each list response until the promise settles. */
+  holdLists: () => Promise<void> = async () => undefined,
+) {
   const keys: string[] = [];
   const linear = createServer((request, response) => {
     keys.push(request.headers.authorization ?? "");
     const chunks: Buffer[] = [];
     request.on("data", (chunk: Buffer) => chunks.push(chunk));
-    request.on("end", () => {
+    request.on("end", async () => {
       const body = JSON.parse(Buffer.concat(chunks).toString("utf8")) as { query: string };
-      const data = body.query.includes("issueUpdate")
+      const update = body.query.includes("issueUpdate");
+      if (!update) await holdLists();
+      const data = update
         ? { issueUpdate: { success: true, issue: null } }
         : { issues: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } };
       response.writeHead(200, { "Content-Type": "application/json" });
@@ -172,6 +192,20 @@ describe("handlers", () => {
       await expect(call(updateIssueRpc, { id: "ENG-1", patch: { priority: 1 } })).rejects.toThrow();
       expect(await call(cachedIssuesRpc, query)).toEqual({ value: null, fetchedAt: null });
     });
+  });
+
+  it("does not keep a list that was read before an edit finished", async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await withHandlers(async (call) => {
+      const list = call(listIssuesRpc, query);
+      await expect(call(updateIssueRpc, { id: "ENG-1", patch: { priority: 1 } })).rejects.toThrow();
+      release();
+      await list;
+      expect(await call(cachedIssuesRpc, query)).toEqual({ value: null, fetchedAt: null });
+    }, () => held);
   });
 });
 

@@ -58,13 +58,25 @@ function setup(options: {
   });
   registerSync(server, { access, readSettings: async () => settings });
   const agent = { id: "a1", cwd: "/w", provider: "claude", labels: options.labels, workspaceId: "w1" };
+  let history: unknown[] = [];
   const paseo = {
-    agents: { ref: () => ({ refresh: async () => null, current: () => agent }) },
+    agents: {
+      ref: () => ({
+        refresh: async () => null,
+        current: () => agent,
+        timeline: { refetch: async () => ({ entries: history.map((item) => ({ item })) }) },
+      }),
+    },
     workspaces: { ref: () => ({ refresh: async () => ({ projectId: "shop" }) }) },
   };
   const turnEnded = (items: unknown[]) =>
     hooks.get("agent.turn_ended")?.({ agent: { id: "a1" }, timeline: items }, { paseo });
-  return { turnEnded, updates };
+  /** Paseo 0.16 and later send no timeline with the event. */
+  const turnEndedWithoutTimeline = (items: unknown[]) => {
+    history = items;
+    return hooks.get("agent.turn_ended")?.({ agent: { id: "a1" }, turnId: "t1" }, { paseo });
+  };
+  return { turnEnded, turnEndedWithoutTimeline, updates };
 }
 
 const todos = {
@@ -81,6 +93,18 @@ describe("todo sync hook", () => {
       ["c", "done"],
       ["p", "review"],
     ]);
+  });
+
+  it("reads the agent's timeline when the event has no todos", async () => {
+    const newer = setup({ syncTodos: true, labels: implement });
+    await newer.turnEndedWithoutTimeline([todos]);
+    expect(newer.updates).toEqual([
+      ["c", "done"],
+      ["p", "review"],
+    ]);
+    const empty = setup({ syncTodos: true, labels: implement });
+    await empty.turnEnded([]);
+    expect(empty.updates).toEqual([]);
   });
 
   it("does nothing when sync is off, for reviewers, or for the plugin's own agents", async () => {

@@ -20,6 +20,7 @@ import {
   toolPolicy,
   WaitAgentInput,
 } from "../shared/agent-tools";
+import { createKeyQueue } from "../shared/key-queue";
 import { AGENT_LABELS } from "../shared/prompts";
 import { type LinearSettings, projectEnabled, type ToolSettings, toolSettings } from "../shared/settings";
 import { lastReply, type Paseo } from "./agent-runs";
@@ -107,6 +108,8 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
     if (id) callers.set(grant.id, id);
     return id;
   }
+  // One start per caller at a time, so parallel calls cannot pass the limit together.
+  const oneStartAtATime = createKeyQueue();
   // Agents of one launch that still work count against the limit of the caller's project.
   async function checkLimit(api: Paseo, caller: Caller) {
     const limit = caller.tools.maxAgents;
@@ -125,7 +128,7 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
         "Start a Paseo agent on a sub-issue, in your workspace. It runs on the agent the user chose for the sub-issue, or on your provider and model. It gets the Linear tools. Returns its id at once.",
       input: StartAgentInput,
       allowed: (grant) => grant.canStart,
-      async run(input, grant) {
+      run: (input, grant) => oneStartAtATime(grant.id, async () => {
         const api = paseo();
         const scope = treeScope(grant);
         const key = input.issue.toUpperCase();
@@ -166,7 +169,7 @@ export function linearTools(deps: AgentToolsDependencies, paseo: () => Paseo, mi
           note += ` The model has no thinking option "${thinking}", so it uses ${assigned ? "its default" : "yours"}.`;
         }
         return `Started agent ${handle.id} on ${key}.${note} Call wait_agent with agent_id "${handle.id}" to get its result.`;
-      },
+      }),
     }),
     tool({
       name: "wait_agent",
@@ -276,7 +279,10 @@ export function registerAgentTools(server: PluginServerContext, deps: AgentTools
       const hash = hashOf(token);
       const grant = (await file.read()).grants.find((entry) => entry.hash === hash);
       if (!grant) return null;
-      return { ...grant, tools: toolSettings(await deps.readSettings(), grant.scope.projectId) };
+      const values = await deps.readSettings();
+      const { projectId } = grant.scope;
+      const off = values && projectId && !projectEnabled(values.access, projectId) ? LINEAR_OFF : null;
+      return { ...grant, tools: toolSettings(values, projectId), off };
     },
     closed: (caller) => (caller.tools.enabled ? (caller.off ?? null) : TOOLS_OFF),
   });

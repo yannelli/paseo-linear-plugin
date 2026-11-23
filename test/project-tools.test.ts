@@ -141,4 +141,35 @@ describe("project tokens over HTTP", () => {
     const linearOff = await post({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name: "read_issue", arguments: {} } });
     expect(linearOff.body?.result).toEqual({ content: [{ type: "text", text: LINEAR_OFF }], isError: true });
   });
+
+  it("stop serving an issue agent when Linear is turned off for its project", async () => {
+    directory = await mkdtemp(path.join(tmpdir(), "linear-tools-"));
+    let values: LinearSettings = linearSettings.schema.parse({});
+    const linear = {
+      getIssue: async (key: string) => ({ identifier: key, title: "Checkout", state: { name: "Todo" }, priorityLabel: "High", url: "u", children: [] }),
+    } as unknown as LinearService;
+    const access = { connect: async () => ({ linear, fingerprint: "f" }), mutate: async () => null } as unknown as LinearAccess;
+    let mint: ((scope: unknown, context: { paseo: Paseo }) => Promise<typeof minted>) | null = null;
+    const server = {
+      on: () => () => undefined,
+      before: () => () => undefined,
+      handle: (contract: { name: string }, handler: typeof mint) => {
+        if (contract.name === "linear.agent.tools") mint = handler;
+      },
+    } as unknown as PluginServerContext;
+    close = registerAgentTools(server, { access, dataDirectory: directory, readSettings: async () => values });
+    const scope = { root: "ENG-1", home: "ENG-1", keyScope: null, workspaceId: "w1", projectId: "p1", config: { provider: "claude" } };
+    const { server: mcp } = await mint!(scope, { paseo: fakePaseo().paseo });
+    const call = async () => {
+      const response = await fetch(mcp.url, {
+        method: "POST",
+        headers: { authorization: mcp.headers.Authorization },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "read_issue", arguments: {} } }),
+      });
+      return JSON.stringify(((await response.json()) as { result: unknown }).result);
+    };
+    expect(await call()).toContain("ENG-1: Checkout");
+    values = linearSettings.schema.parse({ access: { allProjects: true, projects: { p1: false } } });
+    expect(await call()).toContain(LINEAR_OFF);
+  });
 });

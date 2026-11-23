@@ -17,6 +17,8 @@ describe("editText", () => {
     const edited = editText(body, "- [ ] Add the form", "- [x] Add the form");
     expect(edited).toEqual({ body: "Plan:\n- [x] Add the form\n- [x] Add the route\n" });
     expect(taskCount("body" in edited ? edited.body : "")).toEqual({ done: 2, total: 2 });
+    // The same items the issue view shows: numbered tasks count, code examples do not.
+    expect(taskCount("1. [x] Ship\n2. [ ] Tell\n\n```\n- [x] example\n```\n")).toEqual({ done: 1, total: 2 });
   });
 
   it("refuses missing or repeated text, and appends for empty old text", () => {
@@ -185,7 +187,12 @@ describe("Linear tools", () => {
       agents: {
         list: async (input: { filter: { labels: Record<string, string> } }) =>
           input.filter.labels["linear.started-by"]
-            ? { entries: (options.children ?? []).map((status, index) => ({ agent: { id: `old-${index}`, status } })) }
+            ? {
+                entries: [
+                  ...(options.children ?? []).map((status, index) => ({ agent: { id: `old-${index}`, status } })),
+                  ...created.map((_, index) => ({ agent: { id: `new-${index}`, status: "running" } })),
+                ],
+              }
             : { entries: [{ agent: { id: "parent-1" } }] },
         ref: (id: string) => ({
           refresh: async () => ({ agent: { id, labels: { "linear.started-by": id === "child-1" ? "g1" : "other" } } }),
@@ -347,6 +354,16 @@ describe("Linear tools", () => {
     const reply = await call("start_agent", { issue: "ENG-2", title: "ENG-2: form", prompt: "Build", thinking: "max" });
     expect(reply).toContain('no thinking option "max", so it uses its default');
     expect(created[0]).toMatchObject({ config: { provider: "claude/haiku" } });
+  });
+
+  it("starts one agent at a time, so parallel calls stay within the limit", async () => {
+    const { call, created } = setup({ tools: { maxAgents: 1 } });
+    const results = await Promise.allSettled([
+      call("start_agent", { issue: "ENG-2", title: "ENG-2: a", prompt: "x" }),
+      call("start_agent", { issue: "ENG-2", title: "ENG-2: b", prompt: "y" }),
+    ]);
+    expect(results.map((result) => result.status)).toEqual(["fulfilled", "rejected"]);
+    expect(created).toHaveLength(1);
   });
 
   it("refuses to start more agents than the limit while they work", async () => {

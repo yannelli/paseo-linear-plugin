@@ -1,12 +1,15 @@
 import { usePaseo, useRpc } from "@getpaseo/plugin/client";
 import {
   type InfiniteData,
+  type QueryClient,
+  type QueryFilters,
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { createKeyQueue } from "../shared/key-queue";
 import {
   authStatusRpc,
   cachedCatalogRpc,
@@ -39,6 +42,26 @@ export const queryKeys = {
   projects: ["linear", "projects"] as const,
   providers: ["linear", "providers"] as const,
 };
+
+// An issue opened by its key, such as ENG-123, is cached under the key, so changes find every
+// cached copy of the issue by its id.
+function issueCopies(scope: Scope, issueId: string): QueryFilters {
+  return {
+    queryKey: [...scoped(scope), "issue"],
+    predicate: (query) => (query.state.data as IssueDetail | undefined)?.id === issueId,
+  };
+}
+
+function updateIssueCopies(
+  queries: QueryClient,
+  scope: Scope,
+  issueId: string,
+  update: (issue: IssueDetail) => IssueDetail,
+) {
+  queries.setQueriesData<IssueDetail>(issueCopies(scope, issueId), (current) =>
+    current ? update(current) : current,
+  );
+}
 
 // Stale-while-revalidate: the daemon's last response shows while the Linear request runs.
 function useSaved<T>(
@@ -121,13 +144,15 @@ export function useUpdateIssue(issueId: string) {
   return useMutation({
     mutationFn: (patch: IssuePatch) => update({ id: issueId, patch, projectId: scope }),
     onSuccess: ({ issue }) => {
-      queries.setQueryData<IssueDetail>(queryKeys.issue(scope, issueId), (current) =>
-        current ? { ...current, ...issue } : current,
-      );
+      updateIssueCopies(queries, scope, issueId, (current) => ({ ...current, ...issue }));
       void queries.invalidateQueries({ queryKey: queryKeys.issues(scope) });
     },
   });
 }
+
+// Saves of one description run in order, also when the issue was closed and opened again,
+// so the save of a closed editor cannot land after a newer one.
+const oneDescriptionSave = createKeyQueue();
 
 // Plain RPC calls, not a mutation, so a save that finishes after the view closes still
 // updates the cache. The update returns a summary without the description, so callers
@@ -137,23 +162,21 @@ export function useDescriptionSaver(issueId: string) {
   const update = useRpc(updateIssueRpc);
   const queries = useQueryClient();
   return useMemo(() => {
-    const key = queryKeys.issue(scope, issueId);
+    const copies = issueCopies(scope, issueId);
     return {
       show(description: string) {
-        void queries.cancelQueries({ queryKey: key });
-        queries.setQueryData<IssueDetail>(key, (current) =>
-          current ? { ...current, description } : current,
-        );
+        void queries.cancelQueries(copies);
+        updateIssueCopies(queries, scope, issueId, (current) => ({ ...current, description }));
       },
       async save(description: string) {
-        const { issue } = await update({ id: issueId, patch: { description }, projectId: scope });
-        queries.setQueryData<IssueDetail>(key, (current) =>
-          current ? { ...current, ...issue } : current,
+        const { issue } = await oneDescriptionSave(`${scope ?? ""}:${issueId}`, () =>
+          update({ id: issueId, patch: { description }, projectId: scope }),
         );
+        updateIssueCopies(queries, scope, issueId, (current) => ({ ...current, ...issue }));
         void queries.invalidateQueries({ queryKey: queryKeys.issues(scope) });
       },
       reload() {
-        void queries.invalidateQueries({ queryKey: key });
+        void queries.invalidateQueries(copies);
       },
     };
   }, [scope, issueId, update, queries]);
@@ -166,9 +189,10 @@ export function useAddComment(issueId: string) {
   return useMutation({
     mutationFn: (body: string) => create({ issueId, body, projectId: scope }),
     onSuccess: ({ comment }) => {
-      queries.setQueryData<IssueDetail>(queryKeys.issue(scope, issueId), (current) =>
-        current ? { ...current, comments: [...current.comments, comment] } : current,
-      );
+      updateIssueCopies(queries, scope, issueId, (current) => ({
+        ...current,
+        comments: [...current.comments, comment],
+      }));
     },
   });
 }

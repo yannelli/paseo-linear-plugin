@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../client/web", () => ({ readStored: () => null, writeStored: () => {} }));
 import { mergePreferences, parsePreferences, withLaunch } from "../client/agent-preferences";
 
 describe("agent preferences", () => {

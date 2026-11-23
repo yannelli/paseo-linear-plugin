@@ -112,7 +112,7 @@ Remove your API key and any private issue content before you post.
 
 ## Security problems
 
-Do not open a public issue for a security problem. Contact the maintainer through [ryanyannelli.com](https://ryanyannelli.com) and include the steps to reproduce it.
+Do not open a public issue for a security problem. Report it privately as described in [SECURITY.md](SECURITY.md), and include the steps to reproduce it.
 
 ## Graphics
 

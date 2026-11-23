@@ -142,17 +142,20 @@ function patternWords(program: string, args: readonly ShellWord[]): Set<number> 
   return patterns;
 }
 
-/** False when the path exists outside the folder, also through a link. A missing path cannot leak. */
-function insideFolder(filePath: string, cwd: string): boolean {
-  const real = physicalPath(filePath, cwd);
+/**
+ * False when the path exists outside the folder, also through a link. A missing path cannot leak.
+ * A relative path starts at `base`, the folder the command runs in.
+ */
+function insideFolder(filePath: string, cwd: string, base = cwd): boolean {
+  const real = physicalPath(filePath, base);
   if (real === null) return true;
   const relative = path.relative(realPath(cwd) ?? path.resolve(cwd), real);
   return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 /** A word that names a path outside the folder, also as the value of a flag such as --file=. */
-function leavesFolder(program: string, word: string, cwd: string): boolean {
-  const outside = (part: string) => part !== "" && !insideFolder(part, cwd);
+function leavesFolder(program: string, word: string, cwd: string, base: string): boolean {
+  const outside = (part: string) => part !== "" && !insideFolder(part, cwd, base);
   const value = word.includes("=") ? word.slice(word.indexOf("=") + 1) : "";
   if (word.startsWith("--")) return outside(value);
   // A short option can carry its value, such as -f/etc/passwd, so check what follows each letter.
@@ -162,8 +165,8 @@ function leavesFolder(program: string, word: string, cwd: string): boolean {
   return outside(word) || outside(value);
 }
 
-const allowedWord = (program: string, text: string, cwd: string) =>
-  !unsafeFlag(program, text) && !leavesFolder(program, text, cwd);
+const allowedWord = (program: string, text: string, cwd: string, base: string) =>
+  !unsafeFlag(program, text) && !leavesFolder(program, text, cwd, base);
 
 /** A pattern word: only the flag letters in front of an attached -e pattern are checked. */
 function allowedPattern(program: string, text: string): boolean {
@@ -171,7 +174,8 @@ function allowedPattern(program: string, text: string): boolean {
   return !unsafeFlag(program, text.slice(0, text.indexOf("e") + 1));
 }
 
-export function readOnlyCommand(command: string, cwd: string): boolean {
+/** True when the command only reads inside `cwd`. It runs in `workdir`, a folder inside `cwd`. */
+export function readOnlyCommand(command: string, cwd: string, workdir = cwd): boolean {
   const commands = shellWords(command.replace(/\s2>\s*\/dev\/null/g, " ").trim());
   if (!commands) return false;
   return commands.every((words) => {
@@ -184,11 +188,11 @@ export function readOnlyCommand(command: string, cwd: string): boolean {
     const patterns = patternWords(program, args);
     return args.every((word, index) => {
       if (patterns.has(index)) return allowedPattern(program, word.text);
-      if (word.glob === null) return allowedWord(program, word.text, cwd);
+      if (word.glob === null) return allowedWord(program, word.text, cwd, workdir);
       // The shell passes the matches, or the word itself when nothing matches.
-      const matches = expandGlob(word.glob, cwd);
+      const matches = expandGlob(word.glob, workdir);
       if (matches === null) return false;
-      return (matches.length > 0 ? matches : [word.text]).every((text) => allowedWord(program, text, cwd));
+      return (matches.length > 0 ? matches : [word.text]).every((text) => allowedWord(program, text, cwd, workdir));
     });
   });
 }
@@ -225,6 +229,6 @@ export function readOnlyAnswer(request: PermissionRequest, cwd: string): Permiss
         (searchPath === null || insideFolder(searchPath, cwd))) ||
       (typeof command === "string" &&
         (workdir === undefined || insideFolder(workdir, cwd)) &&
-        readOnlyCommand(command, cwd)));
+        readOnlyCommand(command, cwd, workdir === undefined ? cwd : path.resolve(cwd, workdir))));
   return allowed ? { behavior: "allow" } : { behavior: "deny", message: DENIED };
 }

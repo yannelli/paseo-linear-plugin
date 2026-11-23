@@ -24,6 +24,7 @@ type Agent = Awaited<
 >["entries"][number]["agent"];
 
 const ACCESS_POLL_MS = 60_000;
+const LOOKUP_RETRY_MS = 10_000;
 
 // Paseo marks delegated sub-agents with this label; they share the parent's composer.
 const PARENT_LABEL = "paseo.parent-agent-id";
@@ -269,6 +270,15 @@ export function contributeComposerPills(client: PluginClientContext) {
   const agents = new Map<string, Agent>();
   const projects = new Map<string, string | null>();
   const loading = new Set<string>();
+  const retries = new Set<ReturnType<typeof setTimeout>>();
+  const pause = () =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        retries.delete(timer);
+        resolve();
+      }, LOOKUP_RETRY_MS);
+      retries.add(timer);
+    });
   const remove = (agentId: string) => {
     pills.get(agentId)?.registration.remove();
     pills.delete(agentId);
@@ -276,7 +286,8 @@ export function contributeComposerPills(client: PluginClientContext) {
   const applyAll = () => {
     for (const agent of agents.values()) apply(agent);
   };
-  // A workspace never changes project, so each one is looked up once.
+  // A workspace never changes project, so each one is looked up once. A failed lookup is not
+  // kept as "no project", which has its own switch; it is asked again after a pause.
   const projectOf = (workspaceId: string): string | null | undefined => {
     if (projects.has(workspaceId)) return projects.get(workspaceId);
     if (!loading.has(workspaceId)) {
@@ -284,8 +295,7 @@ export function contributeComposerPills(client: PluginClientContext) {
       void client.paseo.workspaces
         .ref(workspaceId)
         .refresh()
-        .then((workspace) => projects.set(workspaceId, workspace?.projectId ?? null))
-        .catch(() => projects.set(workspaceId, null))
+        .then((workspace) => void projects.set(workspaceId, workspace?.projectId ?? null), pause)
         .finally(() => {
           loading.delete(workspaceId);
           applyAll();
@@ -374,6 +384,7 @@ export function contributeComposerPills(client: PluginClientContext) {
     });
   return () => {
     lifetime.abort();
+    for (const timer of retries) clearTimeout(timer);
     clearInterval(poll);
     stopListening();
     removeAll();

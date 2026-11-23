@@ -162,6 +162,15 @@ describe("links out of the folder", () => {
       for (const command of ["cat *", "ls */", "cat ***/id_rsa", "cat .*", "head e*/*", "cat escape/../home/id_rsa", "cat escape/../home/*"]) {
         expect(readOnlyCommand(command, root)).toBe(false);
       }
+      // A command that runs in a folder below the root reads paths from that folder.
+      await symlink(path.join(outside, "id_rsa"), path.join(root, "src", "inner-key"));
+      const shell = (command: string, workdir: string) =>
+        readOnlyAnswer({ id: "p", provider: "codex", name: "Bash", kind: "tool", input: { command, workdir } } as PermissionRequest, root);
+      expect(shell("cat a.ts", path.join(root, "src")).behavior).toBe("allow");
+      expect(shell("cat a.ts", "src").behavior).toBe("allow");
+      for (const command of ["cat inner-key", "cat inner*", "head ../key"]) {
+        expect(shell(command, path.join(root, "src")).behavior).toBe("deny");
+      }
     } finally {
       await rm(base, { recursive: true, force: true });
     }

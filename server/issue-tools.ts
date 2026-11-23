@@ -12,6 +12,7 @@ import {
   type ToolScope,
   UpdateIssueInput,
 } from "../shared/agent-tools";
+import { createKeyQueue } from "../shared/key-queue";
 import type { Catalog, IssueDetail, IssuePatch, IssueSummary } from "../shared/linear";
 import type { ToolSettings } from "../shared/settings";
 import type { LinearAccess } from "./handlers";
@@ -92,16 +93,7 @@ function summaryText(verb: string, issue: IssueSummary): string {
 
 export function issueTools(access: LinearAccess): McpTool<IssueCaller>[] {
   // One edit per issue at a time, so two agents that check off items never undo each other.
-  const edits = new Map<string, Promise<unknown>>();
-  function oneAtATime<T>(key: string, run: () => Promise<T>): Promise<T> {
-    const next = (edits.get(key) ?? Promise.resolve()).catch(() => undefined).then(run);
-    edits.set(key, next);
-    const forget = () => {
-      if (edits.get(key) === next) edits.delete(key);
-    };
-    next.then(forget, forget);
-    return next;
-  }
+  const oneAtATime = createKeyQueue();
   // Statuses and users change rarely, so each key's catalog is kept for a few minutes.
   const catalogs = new Map<string, { at: number; value: Catalog }>();
   async function catalogOf(keyScope: string | null): Promise<Catalog> {
@@ -148,10 +140,12 @@ export function issueTools(access: LinearAccess): McpTool<IssueCaller>[] {
         "Change the description of a Linear issue. Replace exact text, for example `- [ ] Add the form` with `- [x] Add the form` to check off a task list item.",
       input: EditIssueInput,
       allowed: canChange,
-      run(input, caller) {
+      async run(input, caller) {
         const keyScope = keyScopeOf(caller.scope);
         const home = isProjectScope(caller.scope) ? "" : caller.scope.home;
-        const key = `${keyScope ?? ""}:${(input.issue ?? home).toUpperCase()}`;
+        // Projects can share one Linear key, so the lock names the key, not the project.
+        const { fingerprint } = await access.connect(keyScope);
+        const key = `${fingerprint}:${(input.issue ?? home).toUpperCase()}`;
         return oneAtATime(key, () =>
           access.mutate(keyScope, async (linear) => {
             const issue = await scopedIssue(linear, caller.scope, input.issue);
