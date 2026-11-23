@@ -76,6 +76,6 @@ export function writeStored(key: string, value: string): void {
   try {
     storage()?.setItem(key, value);
   } catch {
-    // Blocked storage only means the next start uses the built-in icon first.
+    // Blocked storage only means the next start does not see the value.
   }
 }

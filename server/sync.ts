@@ -1,4 +1,5 @@
 import type { PluginServerContext } from "@getpaseo/plugin/server";
+import { createKeyQueue } from "../shared/key-queue";
 import type { WorkflowState } from "../shared/linear";
 import { AGENT_LABELS, isInternalAgent } from "../shared/prompts";
 import { type LinearSettings, projectDefaults, projectEnabled } from "../shared/settings";
@@ -36,7 +37,8 @@ async function agentInfo(paseo: Paseo, agentId: string) {
 export function registerSync(server: PluginServerContext, dependencies: SyncDependencies) {
   const { access, readSettings } = dependencies;
   const teamStates = new Map<string, { at: number; states: Map<string, WorkflowState[]> }>();
-  const queues = new Map<string, Promise<unknown>>();
+  // One sync per issue at a time, so two turns ending together cannot move an issue twice.
+  const queued = createKeyQueue();
 
   async function statesFor(projectId: string | null, teamId: string) {
     const { linear, fingerprint } = await access.connect(projectId);
@@ -73,18 +75,6 @@ export function registerSync(server: PluginServerContext, dependencies: SyncDepe
       console.log(`Linear sync moved ${applied.map((m) => `${m.identifier} to ${m.to.name}`).join(", ")}`);
     }
     return { moves: applied, skipped: null };
-  }
-
-  // One sync per issue at a time, so two turns ending together cannot move an issue twice.
-  function queued(identifier: string, run: () => Promise<SyncResult>): Promise<SyncResult> {
-    const previous = queues.get(identifier) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(run);
-    queues.set(identifier, next);
-    const forget = () => {
-      if (queues.get(identifier) === next) queues.delete(identifier);
-    };
-    next.then(forget, forget);
-    return next;
   }
 
   async function syncAgent(
@@ -126,10 +116,10 @@ export function registerSync(server: PluginServerContext, dependencies: SyncDepe
     const settings = await readSettings();
     const anyOn = settings?.sync.todos || settings?.projects.some((entry) => entry.overrides.syncTodos);
     if (!anyOn) return;
-    const todos = latestTodos(event.timeline);
-    if (!todos) return;
+    // Paseo 0.13 sends an empty timeline and 0.16 sends none, so the sync then reads the agent's.
+    const { timeline } = event as { timeline?: Parameters<typeof latestTodos>[0] };
     try {
-      await syncAgent(paseo, event.agent.id, todos, true);
+      await syncAgent(paseo, event.agent.id, timeline ? latestTodos(timeline) : null, true);
     } catch (error) {
       console.error("Linear sync failed", error);
     }

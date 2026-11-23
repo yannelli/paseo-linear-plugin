@@ -367,6 +367,32 @@ describe("issue filters", () => {
     expect(issue.children).toHaveLength(170);
     expect(issue.children.at(-1)?.identifier).toBe("ENG-269");
   });
+
+  it("loads every page of teams and active users for the catalog", async () => {
+    const user = (n: number) => ({ id: `u${n}`, name: `User ${n}`, displayName: `user${n}`, avatarUrl: null });
+    const team = (key: string) => ({ id: key, key, name: key, states: { nodes: [{ ...state, id: `${key}-s` }] } });
+    const asked: string[] = [];
+    const service = createLinearService(async (query, variables) => {
+      if (query.includes("PaseoLinearUsers")) {
+        asked.push(`users:${String(variables?.after)}`);
+        return { users: { nodes: [user(2)], pageInfo: { hasNextPage: false, endCursor: null } } };
+      }
+      if (query.includes("PaseoLinearTeams")) {
+        asked.push(`teams:${String(variables?.after)}`);
+        return { teams: { nodes: [team("OPS")], pageInfo: { hasNextPage: false, endCursor: null } } };
+      }
+      return {
+        viewer: user(1),
+        organization: { name: "Acme", urlKey: "acme" },
+        teams: { nodes: [team("ENG")], pageInfo: { hasNextPage: true, endCursor: "t1" } },
+        users: { nodes: [user(1)], pageInfo: { hasNextPage: true, endCursor: "u1" } },
+      };
+    });
+    const catalog = await service.catalog();
+    expect(asked.sort()).toEqual(["teams:t1", "users:u1"]);
+    expect(catalog.teams.map((entry) => entry.key)).toEqual(["ENG", "OPS"]);
+    expect(catalog.users.map((entry) => entry.id)).toEqual(["u1", "u2"]);
+  });
 });
 
 describe("Linear GraphQL transport", () => {

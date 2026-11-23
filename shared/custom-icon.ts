@@ -73,6 +73,17 @@ const BLOCKED: readonly (readonly [RegExp, string])[] = [
   [/@import/i, "The SVG imports styles from another file."],
 ];
 
+const codePoint = (code: number) => (code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : "");
+
+/** The markup with character references and CSS escapes decoded, which can spell url( or href. */
+function decodeEscapes(svg: string): string {
+  return svg
+    .replace(/&#x([\da-f]+);?/gi, (_, hex: string) => codePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);?/g, (_, decimal: string) => codePoint(Number(decimal)))
+    .replace(/\\([\da-f]{1,6})\s?/gi, (_, hex: string) => codePoint(Number.parseInt(hex, 16)))
+    .replace(/\\(.)/g, "$1");
+}
+
 const ROOT_TAG = /^<svg\b[^>]*>/i;
 const NUMBER = String.raw`(-?[\d.]+(?:e[-+]?\d+)?)`;
 const VIEW_BOX = new RegExp(String.raw`\sviewBox\s*=\s*["']\s*${NUMBER}[\s,]+${NUMBER}[\s,]+${NUMBER}[\s,]+${NUMBER}\s*["']`, "i");
@@ -105,7 +116,8 @@ export function parseIconSvg(text: string): { svg: string } | { error: string } 
   if (!/^<svg[\s>]/i.test(svg) || !/<\/svg>$/i.test(svg)) {
     return { error: "This is not an SVG. It must start with <svg and end with </svg>." };
   }
-  for (const [pattern, error] of BLOCKED) if (pattern.test(svg)) return { error };
+  const decoded = decodeEscapes(svg);
+  for (const [pattern, error] of BLOCKED) if (pattern.test(svg) || pattern.test(decoded)) return { error };
   const root = ROOT_TAG.exec(svg)?.[0] ?? "";
   let next = root;
   if (!viewBoxOf(svg)) {

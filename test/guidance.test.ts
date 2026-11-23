@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../client/ui", () => ({ errorMessage: (error: unknown) => String(error) }));
 vi.mock("@getpaseo/plugin/client", () => ({ usePaseo: () => null, useRpc: () => null }));
+vi.mock("../client/web", () => ({ readStored: () => null, writeStored: () => {} }));
 import { withHookPlugin } from "../client/launch-plan";
 import { registerAgentHooks } from "../server/agent-hooks";
 import { claudeHooks, shellQuote } from "../shared/agent-hooks";

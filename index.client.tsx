@@ -26,8 +26,9 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
   const removeAll = () => {
     for (const cleanup of cleanups.splice(0).reverse()) cleanup();
   };
-  try {
-    cleanups.push(
+  // Each remover is kept as soon as its item registers, so a failure removes the ones before it.
+  const registrations: (() => Cleanup)[] = [
+    () =>
       client.addWorkspacePanel({
         id: PANEL_ID,
         title: "Linear",
@@ -36,6 +37,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         locations: ["workspace", "explorer"],
         Component: LinearPanel,
       }),
+    () =>
       client.addCommandCenterItem({
         id: "open-issues",
         title: "Linear: Open issues",
@@ -46,6 +48,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
           openPluginScreen(context, SCREEN_ID);
         },
       }),
+    () =>
       client.addCommandCenterItem({
         id: "create-issue",
         title: "Linear: Create issue",
@@ -57,6 +60,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
           openPluginScreen(context, SCREEN_ID);
         },
       }),
+    () =>
       client.addCommandCenterItem({
         id: "workspace-issues",
         title: "Linear: Show issues in this workspace",
@@ -67,6 +71,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
           openPanel(PANEL_ID);
         },
       }),
+    () =>
       client.addCommandCenterItem({
         id: "setup-project",
         title: "Linear: Set up project prompts",
@@ -77,6 +82,7 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
           openSettings("projects");
         },
       }),
+    () =>
       client.addCommandCenterItem({
         id: "settings",
         title: "Linear: Settings",
@@ -87,7 +93,9 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
           openSettings("connection");
         },
       }),
-    );
+  ];
+  try {
+    for (const register of registrations) cleanups.push(register());
   } catch (error) {
     removeAll();
     throw error;

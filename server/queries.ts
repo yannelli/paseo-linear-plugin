@@ -42,21 +42,34 @@ export const ISSUE_SORT_INPUT: Record<IssueSort, Record<string, unknown>[]> = {
   title: [{ title: { order: "Ascending" } }],
 };
 
+const PAGE_INFO = "pageInfo { hasNextPage endCursor }";
+const TEAM_FIELDS = `id key name states(first: 50) { nodes { ${STATE_FIELDS} } }`;
+const ACTIVE_USERS = "filter: { active: { eq: true } }";
+
 // Linear caps query complexity (connection sizes multiply), so the catalog asks only for
 // what the UI uses: teams with their workflow states, and active users.
 export const CATALOG_QUERY = `
   query PaseoLinearCatalog {
     viewer { ${USER_FIELDS} }
     organization { name urlKey }
-    teams(first: 50) {
-      nodes {
-        id key name
-        states(first: 50) { nodes { ${STATE_FIELDS} } }
-      }
-    }
-    users(first: 250, filter: { active: { eq: true } }) { nodes { ${USER_FIELDS} } }
+    teams(first: 50) { nodes { ${TEAM_FIELDS} } ${PAGE_INFO} }
+    users(first: 250, ${ACTIVE_USERS}) { nodes { ${USER_FIELDS} } ${PAGE_INFO} }
   }
 `;
+
+/** The next pages of teams and users, for workspaces with more than the catalog query loads. */
+export const TEAMS_QUERY = `
+  query PaseoLinearTeams($after: String) {
+    teams(first: 50, after: $after) { nodes { ${TEAM_FIELDS} } ${PAGE_INFO} }
+  }
+`;
+export const USERS_QUERY = `
+  query PaseoLinearUsers($after: String) {
+    users(first: 250, after: $after, ${ACTIVE_USERS}) { nodes { ${USER_FIELDS} } ${PAGE_INFO} }
+  }
+`;
+/** Pages after the first: up to 1,050 teams and 5,250 users in all. */
+const MAX_CATALOG_PAGES = 20;
 
 export const LIST_QUERY = `
   query PaseoLinearIssueList($filter: IssueFilter, $after: String, $sort: [IssueSortInput!]) {
@@ -67,7 +80,7 @@ export const LIST_QUERY = `
   }
 `;
 
-const CHILD_FIELDS = `nodes { id identifier title state { ${STATE_FIELDS} } } pageInfo { hasNextPage endCursor }`;
+const CHILD_FIELDS = `nodes { id identifier title state { ${STATE_FIELDS} } } ${PAGE_INFO}`;
 
 export const DETAIL_QUERY = `
   query PaseoLinearIssueDetail($id: String!) {
@@ -141,17 +154,17 @@ const RawComment = z.object({
   user: UserSchema.nullable(),
 });
 const PageInfo = z.object({ hasNextPage: z.boolean(), endCursor: z.string().nullable() });
-const RawChildren = z.object({
-  nodes: z.array(
-    z.object({
-      id: z.string(),
-      identifier: z.string(),
-      title: z.string(),
-      state: WorkflowStateSchema,
-    }),
-  ),
-  pageInfo: PageInfo.optional(),
-});
+const connection = <T extends z.ZodType>(schema: T) =>
+  z.object({ nodes: z.array(schema), pageInfo: PageInfo.optional() });
+type Connection<T> = { nodes: T[]; pageInfo?: z.infer<typeof PageInfo> };
+const RawChildren = connection(
+  z.object({
+    id: z.string(),
+    identifier: z.string(),
+    title: z.string(),
+    state: WorkflowStateSchema,
+  }),
+);
 const RawDetail = RawSummary.extend({
   description: z.string().nullable(),
   createdAt: z.string(),
@@ -169,18 +182,20 @@ const RawDetail = RawSummary.extend({
     }),
   ),
 });
+const RawTeams = connection(
+  z.object({
+    id: z.string(),
+    key: z.string(),
+    name: z.string(),
+    states: nodes(WorkflowStateSchema),
+  }),
+);
+const RawUsers = connection(UserSchema);
 const CatalogResponse = z.object({
   viewer: UserSchema,
   organization: z.object({ name: z.string(), urlKey: z.string() }),
-  teams: nodes(
-    z.object({
-      id: z.string(),
-      key: z.string(),
-      name: z.string(),
-      states: nodes(WorkflowStateSchema),
-    }),
-  ),
-  users: nodes(UserSchema),
+  teams: RawTeams,
+  users: RawUsers,
 });
 const ListResponse = z.object({
   issues: z.object({
@@ -217,6 +232,23 @@ export function flattenAncestors(chain: RawAncestor | null | undefined): IssueRe
   return ancestors;
 }
 
+/** The nodes of a connection and of up to `maxPages` pages after it. */
+async function allNodes<T>(
+  first: Connection<T>,
+  maxPages: number,
+  next: (after: string) => Promise<Connection<T> | null>,
+): Promise<T[]> {
+  const all = [...first.nodes];
+  let page = first.pageInfo;
+  for (let count = 0; page?.hasNextPage && page.endCursor && count < maxPages; count += 1) {
+    const more = await next(page.endCursor);
+    if (!more) break;
+    all.push(...more.nodes);
+    page = more.pageInfo;
+  }
+  return all;
+}
+
 function sortStates<T extends { states: { position: number }[] }>(team: T): T {
   return { ...team, states: [...team.states].sort((a, b) => a.position - b.position) };
 }
@@ -235,18 +267,13 @@ export function createLinearService(graphql: LinearGraphql) {
   }
 
   // Loads the remaining pages, so the tools, todo sync, and the launch page see every sub-issue.
-  async function allChildren(id: string, first: z.infer<typeof RawChildren>) {
-    const children = [...first.nodes];
-    let page = first.pageInfo;
-    for (let count = 0; page?.hasNextPage && page.endCursor && count < MAX_CHILD_PAGES; count += 1) {
+  function allChildren(id: string, first: z.infer<typeof RawChildren>) {
+    return allNodes(first, MAX_CHILD_PAGES, async (after) => {
       const next = z
         .object({ issue: z.object({ children: RawChildren }).nullable() })
-        .parse(await graphql(CHILDREN_QUERY, { id, after: page.endCursor }));
-      if (!next.issue) break;
-      children.push(...next.issue.children.nodes);
-      page = next.issue.children.pageInfo;
-    }
-    return children;
+        .parse(await graphql(CHILDREN_QUERY, { id, after }));
+      return next.issue?.children ?? null;
+    });
   }
 
   function requireIssue(payload: z.infer<typeof IssuePayload>, action: string): IssueSummary {
@@ -257,7 +284,15 @@ export function createLinearService(graphql: LinearGraphql) {
   return {
     async catalog() {
       const data = CatalogResponse.parse(await graphql(CATALOG_QUERY));
-      return { ...data, teams: data.teams.map(sortStates) };
+      const [teams, users] = await Promise.all([
+        allNodes(data.teams, MAX_CATALOG_PAGES, async (after) =>
+          z.object({ teams: RawTeams }).parse(await graphql(TEAMS_QUERY, { after })).teams,
+        ),
+        allNodes(data.users, MAX_CATALOG_PAGES, async (after) =>
+          z.object({ users: RawUsers }).parse(await graphql(USERS_QUERY, { after })).users,
+        ),
+      ]);
+      return { viewer: data.viewer, organization: data.organization, teams: teams.map(sortStates), users };
     },
     async listIssues(query: IssueQuery) {
       const text = query.query.trim();

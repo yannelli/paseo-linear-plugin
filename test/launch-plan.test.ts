@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 // The plan's helpers are pure; stub the React Native imports the module pulls in.
 vi.mock("../client/ui", () => ({ errorMessage: (error: unknown) => String(error) }));
 vi.mock("@getpaseo/plugin/client", () => ({ usePaseo: () => null, useRpc: () => null }));
+vi.mock("../client/web", () => ({ readStored: () => null, writeStored: () => {} }));
 import type { AgentSelection } from "../client/agent-options";
 import {
   agentLabel,

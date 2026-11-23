@@ -58,6 +58,14 @@ export function createCredentialStore(options: {
     await rename(temporary, options.file);
   }
 
+  // Saves and clears run one at a time, so a change never writes over another change.
+  let changes: Promise<unknown> = Promise.resolve();
+  function change(next: (stored: CredentialFile) => CredentialFile): Promise<void> {
+    const run = changes.catch(() => undefined).then(async () => write(next(await read())));
+    changes = run;
+    return run;
+  }
+
   return {
     async resolve(projectId) {
       const stored = await read();
@@ -67,24 +75,21 @@ export function createCredentialStore(options: {
       const fromEnv = env.LINEAR_API_KEY?.trim();
       return fromEnv ? { apiKey: fromEnv, source: "environment" } : null;
     },
-    async save(apiKey, projectId) {
-      const stored = await read();
+    save(apiKey, projectId) {
       const key = apiKey.trim();
-      if (projectId) {
-        await write({ ...stored, projects: { ...stored.projects, [projectId]: { apiKey: key } } });
-      } else {
-        await write({ ...stored, apiKey: key });
-      }
+      return change((stored) =>
+        projectId
+          ? { ...stored, projects: { ...stored.projects, [projectId]: { apiKey: key } } }
+          : { ...stored, apiKey: key },
+      );
     },
-    async clear(projectId) {
-      const stored = await read();
-      if (projectId) {
+    clear(projectId) {
+      return change((stored) => {
+        if (!projectId) return { projects: stored.projects };
         const projects = { ...stored.projects };
         delete projects[projectId];
-        await write({ ...stored, projects });
-      } else {
-        await write({ projects: stored.projects });
-      }
+        return { ...stored, projects };
+      });
     },
     async projectKeys() {
       const stored = await read();

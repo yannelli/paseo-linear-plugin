@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { readStored, writeStored } from "./web";
 
 // Agent choices remembered between launches, in the shape Paseo's new-agent form stores them.
 
@@ -24,27 +25,11 @@ export interface RememberedLaunch {
   mode: string | null;
 }
 
-interface KeyValueStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
 /** Paseo's own new-agent preferences. Read only: the app owns this key. */
 export const PASEO_PREFERENCES_KEY = "@paseo:create-agent-preferences";
 export const PLUGIN_PREFERENCES_KEY = "@yannelli/paseo-linear-plugin:agent-preferences";
 
 let sessionPreferences: AgentPreferences = {};
-
-// Paseo keeps preferences in AsyncStorage, which is localStorage on web and desktop.
-// Native apps have no localStorage, so only this session's launches are remembered there.
-function storage(): KeyValueStorage | null {
-  try {
-    const candidate = (globalThis as { localStorage?: KeyValueStorage }).localStorage;
-    return candidate && typeof candidate.getItem === "function" ? candidate : null;
-  } catch {
-    return null;
-  }
-}
 
 export function parsePreferences(raw: string | null): AgentPreferences {
   if (!raw) return {};
@@ -56,13 +41,9 @@ export function parsePreferences(raw: string | null): AgentPreferences {
   }
 }
 
-function readStored(key: string): AgentPreferences {
-  try {
-    return parsePreferences(storage()?.getItem(key) ?? null);
-  } catch {
-    return {};
-  }
-}
+// Paseo keeps preferences in AsyncStorage, which is localStorage on web and desktop.
+// Native apps have no localStorage, so only this session's launches are remembered there.
+const readPreferences = (key: string): AgentPreferences => parsePreferences(readStored(key));
 
 /** Layers `top` over `base`, per provider and per model. */
 export function mergePreferences(base: AgentPreferences, top: AgentPreferences): AgentPreferences {
@@ -96,17 +77,13 @@ export function withLaunch(
 
 /** Paseo's remembered choices, overridden by launches made from this plugin. */
 export function loadAgentPreferences(): AgentPreferences {
-  const paseo = readStored(PASEO_PREFERENCES_KEY);
-  const plugin = mergePreferences(readStored(PLUGIN_PREFERENCES_KEY), sessionPreferences);
+  const paseo = readPreferences(PASEO_PREFERENCES_KEY);
+  const plugin = mergePreferences(readPreferences(PLUGIN_PREFERENCES_KEY), sessionPreferences);
   return mergePreferences(paseo, plugin);
 }
 
 export function rememberLaunch(launch: RememberedLaunch): void {
   sessionPreferences = withLaunch(sessionPreferences, launch);
-  try {
-    const stored = withLaunch(readStored(PLUGIN_PREFERENCES_KEY), launch);
-    storage()?.setItem(PLUGIN_PREFERENCES_KEY, JSON.stringify(stored));
-  } catch {
-    // Storage full or blocked: this session still remembers the launch.
-  }
+  // Storage full or blocked: this session still remembers the launch.
+  writeStored(PLUGIN_PREFERENCES_KEY, JSON.stringify(withLaunch(readPreferences(PLUGIN_PREFERENCES_KEY), launch)));
 }

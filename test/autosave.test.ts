@@ -93,6 +93,24 @@ describe("createAutosave", () => {
     await expect(flushed).resolves.toBeUndefined();
   });
 
+  it("flush also saves an edit made after it started", async () => {
+    const { autosave, calls } = setup(100);
+    autosave.schedule("first");
+    let flushed = false;
+    void autosave.flush().then(() => {
+      flushed = true;
+    });
+    autosave.schedule("second");
+    calls[0]?.resolve();
+    await settle();
+    expect(calls.map((call) => call.value)).toEqual(["first", "second"]);
+    expect(flushed).toBe(false);
+    calls[1]?.resolve();
+    await settle();
+    expect(flushed).toBe(true);
+    expect(autosave.busy()).toBe(false);
+  });
+
   it("keeps a failed value so a retry can save it", async () => {
     const { autosave, calls, statuses } = setup(100);
     autosave.schedule("text");

@@ -60,6 +60,11 @@ export function createAutosave(options: AutosaveOptions): Autosave {
     run().catch(() => undefined);
   }
 
+  // An edit made while a save runs waits for its own timer, so flush starts it too.
+  function flush(): Promise<void> {
+    return run().then(() => (queued === null ? undefined : flush()));
+  }
+
   return {
     schedule(value, delayMs = options.delayMs) {
       queued = value;
@@ -67,7 +72,7 @@ export function createAutosave(options: AutosaveOptions): Autosave {
       options.onStatus("pending");
       timer = setTimeout(background, delayMs);
     },
-    flush: run,
+    flush,
     cancel() {
       clearTimer();
       queued = null;
