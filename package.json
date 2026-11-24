@@ -1,6 +1,6 @@
 {
   "name": "@yannelli/paseo-linear-plugin",
-  "version": "2.1.2",
+  "version": "2.1.3",
   "description": "Browse and triage Linear issues in Paseo and start agents from them",
   "license": "Apache-2.0",
   "author": "yannelli (https://github.com/yannelli)",
