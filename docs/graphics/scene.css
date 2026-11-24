@@ -1,29 +1,62 @@
 @font-face {
-  font-family: "Instrument Sans";
-  src: url("fonts/instrument-sans.woff2") format("woff2");
-  font-weight: 400 700;
+  font-family: "Geist";
+  src: url("fonts/geist.woff2") format("woff2");
+  font-weight: 100 900;
 }
 @font-face {
-  font-family: "JetBrains Mono";
-  src: url("fonts/jetbrains-mono.woff2") format("woff2");
-  font-weight: 100 800;
+  font-family: "Geist Mono";
+  src: url("fonts/geist-mono.woff2") format("woff2");
+  font-weight: 100 900;
 }
-/* Colors from the Paseo dark theme (paseoDarkColors in packages/app/src/styles/theme.ts). */
-:root {
-  --canvas: #0f1211;
-  --sidebar: #141716;
-  --surface0: #181b1a;
-  --surface1: #1e2120;
-  --surface2: #272a29;
-  --surface3: #434645;
-  --border: #252b2a;
-  --border-accent: #2f3534;
+/* Window colors come from two Paseo themes (packages/app/src/styles/theme.ts): Zinc dark and light.
+   The canvas around the windows follows linear.app in dark and vercel.com in light. */
+.theme-dark {
+  --canvas: #08090a;
+  --canvas-ink: #f7f8f8;
+  --canvas-muted: #8a8f98;
+  --grid: rgba(255, 255, 255, 0.06);
+  --glow: rgba(255, 255, 255, 0.08);
+  --sidebar: #131316;
+  --surface0: #18181b;
+  --surface1: #1f1f22;
+  --surface2: #27272a;
+  --surface3: #3f3f46;
+  --border: #27272a;
+  --border-accent: #303036;
   --fg: #fafafa;
-  --muted: #a1a5a4;
-  --faint: #717574;
+  --muted: #a1a1aa;
+  --faint: #71717a;
+  --accent: #e4e4e7;
+  --accent-fg: #18181b;
+  --danger: #e0786e;
+  --state-progress: #f2c94c;
+  --state-todo: #d4d4d8;
+  --hero-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 40px 100px rgba(0, 0, 0, 0.7);
+  --frame-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+}
+.theme-light {
+  --canvas: #fafafa;
+  --canvas-ink: #0a0a0a;
+  --canvas-muted: #666666;
+  --grid: rgba(0, 0, 0, 0.06);
+  --glow: rgba(255, 255, 255, 0.95);
+  --sidebar: #f4f4f5;
+  --surface0: #ffffff;
+  --surface1: #fafafa;
+  --surface2: #f4f4f5;
+  --surface3: #e4e4e7;
+  --border: #e4e4e7;
+  --border-accent: #e4e4e7;
+  --fg: #1a1a1e;
+  --muted: #71717a;
+  --faint: #a1a1aa;
   --accent: #20744a;
-  --accent-bright: #7ccba0;
-  --danger: #d8847b;
+  --accent-fg: #ffffff;
+  --danger: #b04138;
+  --state-progress: #d9a300;
+  --state-todo: #a1a1aa;
+  --hero-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 30px 80px rgba(0, 0, 0, 0.12);
+  --frame-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.09);
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -32,27 +65,24 @@ body {
   overflow: hidden;
   background: var(--canvas);
   color: var(--fg);
-  font: 400 14px/1.4 "Instrument Sans", sans-serif;
+  font: 400 14px/1.4 "Geist", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 main { width: 100%; height: 100%; overflow: hidden; }
-code, .mono { font-family: "JetBrains Mono", monospace; }
+code, .mono { font-family: "Geist Mono", monospace; }
 .i { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .muted { color: var(--muted); }
 .urgent { color: var(--danger); }
 .hrow { display: flex; align-items: center; gap: 8px; }
 
-/* Page layout: a headline row, then the mock window. */
-.page { display: flex; flex-direction: column; padding: 36px 32px 32px; }
-h1 { margin: 0; font-size: 34px; line-height: 42px; font-weight: 600; letter-spacing: -0.4px; }
-.sub { margin: 6px 0 0; color: var(--muted); font-size: 17px; line-height: 24px; }
+/* README images: a window on a transparent frame, so it sits on the GitHub page. */
+.frame { padding: 24px 40px 56px; }
 .window {
-  margin-top: 26px;
   border: 1px solid var(--border-accent);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--surface0);
   overflow: hidden;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--frame-shadow);
 }
 .titlebar {
   height: 38px;
@@ -83,7 +113,7 @@ h1 { margin: 0; font-size: 34px; line-height: 42px; font-weight: 600; letter-spa
   background: var(--surface2);
   color: var(--fg);
 }
-.btn.primary { background: var(--accent); color: #fff; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); }
 .btn.ghost { background: transparent; }
 .btn.outline { background: transparent; border: 1px solid var(--border-accent); }
 .btn.md { height: 40px; }
@@ -248,7 +278,7 @@ h1 { margin: 0; font-size: 34px; line-height: 42px; font-weight: 600; letter-spa
 .toggle { min-height: 34px; display: flex; align-items: center; gap: 10px; font-size: 14px; }
 .toggle span { flex: 1; }
 .switch { position: relative; width: 36px; height: 20px; flex: none; border-radius: 10px; background: var(--accent); }
-.switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-fg); }
 .start { align-self: flex-end; }
 
 /* Plugin settings (client/settings-connection.tsx, client/settings-keys.tsx). */
@@ -287,29 +317,47 @@ h1 { margin: 0; font-size: 34px; line-height: 42px; font-weight: 600; letter-spa
 }
 .select .i { width: 14px; height: 14px; color: var(--muted); }
 
-/* GitHub social preview. */
-.social { display: flex; align-items: center; gap: 56px; padding: 0 64px 0 72px; }
-.social-text { width: 500px; flex: none; display: flex; flex-direction: column; }
-.social h1 { font-size: 64px; line-height: 76px; letter-spacing: -1.6px; }
-.facts { margin: 30px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 12px; font-size: 22px; line-height: 30px; }
-.facts li { display: flex; align-items: center; gap: 14px; white-space: nowrap; }
-.facts li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-bright); }
-.install {
-  margin-top: 40px;
+/* Hero and GitHub social preview: copy on the left, the issue view on the right fading out. */
+.hero { position: relative; height: 100%; overflow: hidden; color: var(--canvas-ink); }
+.grid {
+  position: absolute;
+  inset: 0;
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 64px 64px;
+  background-position: -1px -1px;
+  -webkit-mask-image: radial-gradient(ellipse 62% 78% at 74% 42%, #000 20%, transparent 78%);
+}
+.glow { position: absolute; left: 560px; top: -160px; width: 720px; height: 640px; background: radial-gradient(closest-side, var(--glow), transparent); }
+.brand { position: absolute; left: 72px; top: 56px; display: flex; align-items: center; gap: 12px; font-size: 18px; font-weight: 500; letter-spacing: -0.2px; white-space: nowrap; }
+.brand svg { width: 34px; height: 34px; }
+.hero-copy { position: absolute; left: 72px; top: 0; bottom: 0; width: 560px; display: flex; flex-direction: column; justify-content: center; padding-top: 28px; }
+.hero h1 { margin: 0; padding-bottom: 10px; font-size: 76px; line-height: 80px; font-weight: 600; letter-spacing: -3.8px; }
+.lead { max-width: 470px; margin: 14px 0 0; color: var(--canvas-muted); font-size: 21px; line-height: 31px; letter-spacing: -0.2px; }
+.command {
+  margin-top: 36px;
   align-self: flex-start;
-  padding: 10px 14px;
+  height: 50px;
+  padding: 0 7px 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border: 1px solid var(--border-accent);
-  border-radius: 8px;
-  background: var(--surface1);
+  border-radius: 25px;
+  background: var(--surface0);
   font-size: 14.5px;
   white-space: nowrap;
 }
-.install span { color: var(--accent-bright); }
-.social .window { flex: 1; min-width: 0; margin-top: 0; }
+.command .dollar { color: var(--canvas-muted); }
+.command .copy { width: 36px; height: 36px; margin-left: 8px; border-radius: 50%; display: grid; place-items: center; background: var(--surface2); color: var(--muted); }
+.command .copy .i { width: 15px; height: 15px; }
+.hero-window {
+  position: absolute;
+  left: 680px;
+  top: 112px;
+  width: 552px;
+  box-shadow: var(--hero-shadow);
+  -webkit-mask-image: linear-gradient(to bottom, #000 52%, transparent 97%);
+}
 
-/* Icon: the mark on a dark tile. It is original and is not the Linear logo. */
-#mark .ring { fill: none; stroke: var(--fg); stroke-width: 3.6; }
-#mark .core { fill: var(--fg); }
-#mark .arrow { fill: none; stroke: var(--accent-bright); stroke-width: 3.6; stroke-linecap: round; stroke-linejoin: round; }
-.icon-tile { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 22%; background: var(--surface0); border: 6px solid var(--border-accent); }
-.icon-tile .mark { width: 62%; }
+/* Icon: issues in a stack, the top one lifted off in Linear indigo. It is original and is not the Linear logo. */
+.logo-full { display: block; width: 256px; height: 256px; }

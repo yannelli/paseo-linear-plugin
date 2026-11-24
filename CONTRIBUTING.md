@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for helping with Linear issues for Paseo. Bug reports, ideas, docs fixes, and code are all welcome. This guide covers the setup, the checks, and how a change becomes a release.
+Thanks for helping with Linear for Paseo. Bug reports, ideas, docs fixes, and code are all welcome. This guide covers the setup, the checks, and how a change becomes a release.
 
 ## Quick start
 
-You need Node.js 24 (see `.nvmrc`). To try the plugin in Paseo, you also need Paseo 0.10.0 or newer and a Linear personal API key.
+You need Node.js 24 (see `.nvmrc`). To try the plugin in Paseo, you also need Paseo 0.11.0 or newer and a Linear personal API key.
 
 ```sh
 git clone https://github.com/yannelli/paseo-linear-plugin.git
@@ -18,7 +18,7 @@ npm run check
 | Command | What it does |
 | --- | --- |
 | `npm run typecheck` | Type checks all TypeScript |
-| `npm test` | Runs the plugin tests (Linear client, key file, cache, handlers, sub-issue nesting, Markdown and task list toggle, description autosave, agent options) and the release script tests |
+| `npm test` | Runs the plugin tests (Linear client, key file, cache, handlers, sub-issue nesting, Markdown parser and task list toggle, description autosave, agent options, prompt guidance and its hooks, the MCP server and its tools with their settings, project tools for every agent, sub-issue agents, todo sync, the read-only setup agent, project settings, SVG icon checks and colors) and the release script tests |
 
 The tests use a local GraphQL server. They do not call Linear and do not need an API key.
 
@@ -53,7 +53,8 @@ If you already installed the npm release, remove it first with `paseo plugin rem
 | `index.server.ts` | Daemon | Registers the settings and the RPC handlers |
 | `test/` | Node.js | Tests (not published) |
 | `scripts/` | GitHub Actions | Release scripts (not published) |
-| `docs/graphics/` | Your machine | Source for the README images |
+| `docs/*.md` | GitHub | Guides linked from the README |
+| `docs/graphics/` | Your machine | Source for the README images, the social preview, and the icon |
 
 Keep these rules when you change code:
 
@@ -61,7 +62,7 @@ Keep these rules when you change code:
 - `shared/` imports only shared code: no Node.js, React, or `server/` modules.
 - Paseo resolves plugin modules only under `client/`, `server/`, and `shared/`. Do not add other module folders at the root.
 - Paseo supplies `@getpaseo/plugin`, `zod`, and React at runtime, so they stay in `devDependencies`. Ask in an issue before you add a runtime dependency.
-- Do not add keys to `paseo-plugin.json` without checking the oldest supported Paseo version. Paseo 0.10 rejects unknown keys.
+- Check the oldest supported Paseo version, 0.11.0, before you use a newer host API or add keys to `paseo-plugin.json`. Detect newer APIs at runtime in `client/compat.ts`, as it does for the SVG icons of Paseo 0.13.
 
 ## Make a change
 
@@ -69,7 +70,7 @@ Keep these rules when you change code:
 2. Create a branch named `<type>/<short-name>`, for example `fix/identifier-trim` or `feat/project-filter`.
 3. Keep each pull request to one change. Small pull requests get reviewed faster.
 4. Add or update tests for any change in behavior.
-5. Update `README.md` or `OVERVIEW.md` when users will notice the change.
+5. Update `README.md`, the guides in `docs/`, or `OVERVIEW.md` when users will notice the change.
 6. Run `npm run check`.
 
 ## Commit messages and pull request titles
@@ -80,7 +81,7 @@ We use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/). P
 | --- | --- | --- |
 | `fix:`, `perf:`, `revert:` | `fix(search): trim identifier queries` | Patch, `0.1.0` to `0.1.1` |
 | `feat:` | `feat(search): match issues by project` | Minor, `0.1.0` to `0.2.0` |
-| `!` after the type, or a `BREAKING CHANGE:` footer | `feat(search)!: drop title search` | Major |
+| `!` after the type or scope, or a `BREAKING CHANGE:` footer | `feat(search)!: drop title search` | Major |
 | `docs:`, `test:`, `chore:`, `ci:`, `refactor:`, `build:` | `docs: explain key permissions` | No release |
 
 Format: `<type>(<optional scope>): <summary>`.
@@ -122,7 +123,22 @@ The README images are illustrations with sample data. To change them, edit `docs
 node docs/graphics/render.mjs
 ```
 
-The script needs Playwright with Chromium. Check each image before you commit it. Do not use the Linear logo or other third-party logos.
+- **Output**
+  - `hero`, `browse`, `launch`, and `keys` in a dark and a light version, such as `browse-dark.png` and `browse-light.png`
+  - The README picks the version that matches the reader's GitHub theme with `<picture>`
+  - `hero-dark.png` is also the GitHub social preview. Upload it in the repository's **Settings → General → Social preview**.
+  - `icon.png` is the plugin icon. `paseo-plugin.json` points at it, and `package.json` ships it.
+- **Look**
+  - Dark follows linear.app, and its windows use Paseo's Zinc dark theme
+  - Light follows vercel.com, and its windows use Paseo's light theme
+  - Fonts are Geist and Geist Mono under the [SIL Open Font License](docs/graphics/fonts/OFL.txt)
+  - Line icons follow [Lucide](https://lucide.dev), which uses the ISC License
+  - The icon is original and is not the Linear logo. The flat mark in the app is `markSvg` in `shared/custom-icon.ts`. Do not use the Linear logo or other third-party logos.
+- **Checks**
+  - The script finds Playwright with Chromium locally or in the global npm root. Set `PLAYWRIGHT_MODULE` to its entry file to choose another copy.
+  - It stops if the fonts do not load, if content leaves the frame or is cut off, or if an image is 900 KB or larger
+
+Check each image before you commit it.
 
 ## Releases
 
@@ -130,8 +146,10 @@ You do not need to change version numbers. When a release-triggering commit land
 
 1. Runs `npm run check`.
 2. Picks the next version from the commit types.
-3. Updates `package.json` and `package-lock.json`, then tags the commit.
-4. Publishes the GitHub release and the npm package.
+3. Updates `package.json` and `package-lock.json`, then pushes an annotated tag.
+4. Publishes the GitHub release with its notes, and publishes [`@yannelli/paseo-linear-plugin`](https://www.npmjs.com/package/@yannelli/paseo-linear-plugin) to npm through trusted publishing (OIDC), with no npm token.
+
+The highest change since the last release sets the next version, and a breaking change makes a major release even before 1.0. To complete a GitHub or npm publication that stopped after its tag was pushed, run the **Release** workflow again.
 
 ### Beta releases
 

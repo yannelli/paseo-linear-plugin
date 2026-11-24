@@ -273,7 +273,7 @@ describe("agent prompts", () => {
       tools: { enabled: true, allowEdits: true, allAgents: true, assignAgents: true, maxAgents: 0 },
       access: { allProjects: true, projects: {} },
       projects: [],
-      icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false, menu: "SquareKanban" },
+      icon: { svg: "", paint: "original", color: "#5E6AD2", solid: false, menu: "Layers" },
     });
   });
 });

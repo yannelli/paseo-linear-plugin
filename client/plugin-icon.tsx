@@ -2,14 +2,16 @@ import { useSettings } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
 import { useEffect, useMemo } from "react";
 import { Image, Platform } from "react-native";
-import { BUILT_IN_ICON, type IconSettings, iconMarkup, paintColor } from "../shared/custom-icon";
+import { BUILT_IN_ICON, type IconSettings, iconMarkup, markSvg, paintColor } from "../shared/custom-icon";
 import { linearSettings } from "../shared/settings";
+import { HostSvgIcon } from "./compat";
 import { svgDataUri } from "./provider-icon";
 import type { Theme } from "./ui";
 import { readStored, writeStored } from "./web";
 
-// The plugin's icon in pills, the sidebar, and plugin screens. Without an SVG, and in native
-// apps, which cannot draw SVG images from plugins, it is the chosen built-in icon.
+// The plugin's icon in pills, the sidebar, and plugin screens: the user's SVG, or the mark without
+// one. Native apps cannot draw SVG images, so they draw the mark through Paseo 0.13 and later, and
+// the chosen built-in icon in place of a user's SVG or on older releases.
 
 // Panels and Command Center items take a Lucide name when they register, outside React.
 // Components that read the settings share the chosen name here. Paseo keeps the icon an open
@@ -58,15 +60,18 @@ export function IconGlyph(props: PluginIconProps & { icon: IconSettings | null }
   const { icon, size, color } = props;
   const accent = props.theme?.colors.accent ?? color;
   const paint = icon ? paintColor(icon, { ink: color, accent }) : null;
-  const svg = Platform.OS === "web" ? (icon?.svg ?? "") : "";
+  const svg = icon?.svg ?? "";
   const solid = icon?.solid === true;
-  const source = useMemo(() => {
-    const markup = svg ? iconMarkup(svg, { ink: color, paint, solid }) : null;
-    return markup ? { uri: svgDataUri(markup, color) } : null;
-  }, [svg, color, paint, solid]);
+  const web = Platform.OS === "web";
+  const markup = useMemo(() => {
+    if (!svg) return markSvg(paint);
+    return web ? iconMarkup(svg, { ink: color, paint, solid }) : null;
+  }, [svg, web, color, paint, solid]);
+  const source = useMemo(() => (markup && web ? { uri: svgDataUri(markup, color) } : null), [markup, web, color]);
   const style = useMemo(() => ({ width: size, height: size }), [size]);
-  if (!source) return <Icon name={icon?.menu ?? BUILT_IN_ICON} size={size} color={paint ?? color} />;
-  return <Image source={source} style={style} resizeMode="contain" accessibilityIgnoresInvertColors />;
+  if (source) return <Image source={source} style={style} resizeMode="contain" accessibilityIgnoresInvertColors />;
+  if (markup && HostSvgIcon) return <HostSvgIcon icon={{ svg: markup }} size={size} color={color} />;
+  return <Icon name={icon?.menu ?? BUILT_IN_ICON} size={size} color={paint ?? color} />;
 }
 
 /** The plugin icon from the saved settings. The built-in icon shows while they load. */

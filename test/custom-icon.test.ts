@@ -5,6 +5,7 @@ import {
   iconMarkup,
   LINEAR_INDIGO,
   MENU_ICONS,
+  markSvg,
   paintColor,
   parseIconSvg,
   safeColor,
@@ -96,6 +97,19 @@ describe("icon transforms", () => {
     expect(iconMarkup("<svg><script/></svg>", look)).toBeNull();
   });
 
+  it("draws the mark in Linear indigo and the icon color, or all in one paint", () => {
+    const mark = markSvg(null);
+    expect(parseIconSvg(mark)).toEqual({ svg: mark });
+    // Paseo's inline SVG rules: no style, script, or foreignObject elements, and no handlers.
+    expect(mark).not.toMatch(/<(style|script|foreignObject)[\s>]|\son[a-z]+=/i);
+    expect(mark).toContain(`fill="${LINEAR_INDIGO}"`);
+    expect(mark).toContain('fill="currentColor"');
+    const painted = markSvg("#00ff00");
+    expect(painted).not.toContain(LINEAR_INDIGO);
+    expect(painted).not.toContain("currentColor");
+    expect(markSvg('red" onload="x')).not.toContain("onload");
+  });
+
   it("keeps colors safe inside attributes", () => {
     expect(safeColor("#abc")).toBe("#abc");
     expect(safeColor('red" onload="x')).toBe("#888888");
@@ -104,7 +118,7 @@ describe("icon transforms", () => {
 
   it("resolves each paint, with defaults that keep the icon as drawn", () => {
     const icon = IconSettingsSchema.parse({});
-    expect(icon).toEqual({ svg: "", paint: "original", color: LINEAR_INDIGO, solid: false, menu: "SquareKanban" });
+    expect(icon).toEqual({ svg: "", paint: "original", color: LINEAR_INDIGO, solid: false, menu: "Layers" });
     const colors = { ink: "#111111", accent: "#222222" };
     expect(paintColor(icon, colors)).toBeNull();
     expect(paintColor({ ...icon, paint: "theme" }, colors)).toBe("#111111");

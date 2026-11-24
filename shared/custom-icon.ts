@@ -12,11 +12,12 @@ export const LINEAR_INDIGO = "#5E6AD2";
 export const MAX_SVG_LENGTH = 64_000;
 export const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
-/** Paseo draws panel tabs, the new tab menu, and Command Center with Lucide names only. */
-export const BUILT_IN_ICON = "SquareKanban";
+/** Paseo draws panel tabs, the new tab menu, and Command Center with Lucide names only. Layers matches the mark. */
+export const BUILT_IN_ICON = "Layers";
 export const MENU_ICONS: readonly { name: string; label: string }[] = [
-  { name: BUILT_IN_ICON, label: "Board (default)" },
+  { name: BUILT_IN_ICON, label: "Layers (default)" },
   ...[
+    ["SquareKanban", "Board"],
     ["Kanban", "Kanban"],
     ["LayoutGrid", "Grid"],
     ["ListTodo", "To-do list"],
@@ -30,7 +31,6 @@ export const MENU_ICONS: readonly { name: string; label: string }[] = [
     ["Triangle", "Triangle"],
     ["Diamond", "Diamond"],
     ["Box", "Box"],
-    ["Layers", "Layers"],
     ["Compass", "Compass"],
     ["Flag", "Flag"],
     ["Bookmark", "Bookmark"],
@@ -50,8 +50,24 @@ export const MENU_ICONS: readonly { name: string; label: string }[] = [
 ];
 const LUCIDE_NAME = /^[A-Z][A-Za-z0-9]*$/;
 
+/**
+ * The plugin's mark, used when there is no SVG: an issue lifted off a stack. The issue is Linear
+ * indigo and the stack takes the color Paseo gives the icon. A paint draws all of it in one color.
+ */
+export function markSvg(paint: string | null): string {
+  const top = safeColor(paint ?? LINEAR_INDIGO);
+  const stack = paint ? safeColor(paint) : "currentColor";
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linejoin="round">' +
+    `<polygon points="12,2 21,6.5 12,11 3,6.5" fill="${top}" stroke="${top}" stroke-width="1.5"/>` +
+    `<polygon points="3,10.5 12,15 21,10.5 21,12 12,16.5 3,12" fill="${stack}" stroke="${stack}"/>` +
+    `<polygon points="3,15 12,19.5 21,15 21,16.5 12,21 3,16.5" fill="${stack}" stroke="${stack}"/>` +
+    "</svg>"
+  );
+}
+
 export const IconSettingsSchema = z.object({
-  /** Checked SVG markup. Empty uses the built-in icon. */
+  /** Checked SVG markup. Empty uses the mark. */
   svg: z.string().max(MAX_SVG_LENGTH).default(""),
   paint: z.enum(ICON_PAINTS).default("original"),
   /** The color of the custom paint. */

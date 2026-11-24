@@ -1,259 +1,86 @@
-![Linear issues in Paseo: an issue view with Start agent and Start review buttons, next to the install command](docs/images/social-preview.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-dark.png">
+  <img alt="Linear for Paseo: an issue view with Start agent and Start review buttons, next to the install command" src="docs/images/hero-light.png">
+</picture>
 
-# Linear issues for Paseo
+# Linear for Paseo
 
-A Paseo plugin for Linear. It adds a Linear screen and a workspace panel where you browse and edit Linear issues. From an issue, you can start an agent that implements it or reviews the work. Your Linear API key stays on the daemon host.
+A [Paseo](https://paseo.sh) plugin for [Linear](https://linear.app). Browse and edit issues in a Linear screen or a workspace panel, then start agents that implement or review them. Your Linear API key stays on the daemon host.
 
-- Browse issues in a list next to the issue view. Search and filter the list, and change its sort order.
-- Nest sub-issues under their parent. Breadcrumbs show the parent chain of an issue.
-- Read descriptions and comments as Markdown.
-- Edit the description in place. It saves as you type. Check off task list items without opening the editor.
-- Change the status, priority, and assignee. Add comments and create issues.
-- Start an agent or a review from an issue. Choose the prompt, agent, model, effort, project, and where the agent runs.
-- Use a different Linear key for a Paseo project.
-- See saved results at once while the plugin gets new data from Linear.
-- Attach a Linear issue to a message in the composer.
-- Open the issue from a **Linear** pill in each agent's composer, or send an issue to any agent.
-- Choose an agent, model, and thinking level for each sub-issue. The agent you start hands those sub-issues to them.
-- Let agent todos move sub-issues to In Progress and Done. This is off until you turn it on.
-- Turn the plugin's Linear tools for agents on or off, and set agent defaults for all projects or for one project.
-- Let an agent read a project's guidelines and propose its instructions and steps.
-- Turn Linear on or off for all projects, or project by project.
+- **Issues**
+  - Search, filter, and sort, with sub-issues nested under their parent
+  - Breadcrumbs show an issue's parent chain
+  - Change the status, priority, and assignee, add comments, and create issues
+  - Descriptions and comments render as Markdown
+  - The description saves as you type. Task list boxes check off without opening the editor.
+  - Saved results show at once while the plugin gets new data from Linear
+- **Agents**
+  - **Start agent** and **Start review** on any issue. Pick the prompt, agent, model, effort, project, and where it runs.
+  - Each sub-issue can get its own agent, model, and thinking level, and the agent you start hands it off
+  - Agent todos move sub-issues to In Progress and Done. Off until you turn it on.
+  - The plugin's Linear tools for agents, on or off
+- **Projects**
+  - Linear on or off for all projects, or project by project
+  - A different Linear key and agent defaults per Paseo project
+  - A setup agent that reads a project's guidelines and proposes its instructions and steps
+- **Composer**
+  - A **Linear** pill on each agent that opens its issue, or sends an issue to any agent
+  - **Attach Linear issue** in the attachment menu
+  - `/linear ENG-123` opens an issue, and `/linear <text>` searches
 
-![Linear screen with an issue list grouped by status on the left and issue ENG-123 open on the right](docs/images/browse.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/browse-dark.png">
+  <img alt="Linear screen with an issue list grouped by status on the left and issue ENG-123 open on the right" src="docs/images/browse-light.png">
+</picture>
 
-![Agent setup page for ENG-123 with the prompt, the prompt, model, thinking, and mode controls, the Project and Run in fields, and three options](docs/images/launch.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/launch-dark.png">
+  <img alt="Agent setup page for ENG-123 with the prompt, the template, model, thinking, and mode controls, the Project and Run in fields, and three options" src="docs/images/launch-light.png">
+</picture>
 
-![Linear account settings with the default key status, the default key form, and a project key for Acme Mobile](docs/images/keys.png)
-
-The images are illustrations with sample data. They come from `docs/graphics`; see [Graphics](#graphics).
-
-## What you need
-
-- Paseo 0.10.0 or newer, with **Enable plugins** turned on in **Settings → Plugins**.
-- A Linear personal API key. Create one in Linear under **Settings → Security & access → Personal API keys**. To change issues, add comments, or create issues, the key must have write access.
+<sub>Illustrations with sample data, rendered from <code>docs/graphics</code>.</sub>
 
 ## Install
+
+You need Paseo 0.11.0 or newer and a Linear personal API key.
+
+**Step 1 - Turn On Plugins**
+
+In Paseo, turn on **Enable plugins** in **Settings → Plugins**.
+
+**Step 2 - Add the Plugin**
 
 ```sh
 paseo plugin add npm:@yannelli/paseo-linear-plugin
 paseo plugin ls paseo-linear-plugin
 ```
 
-Version 0.4.0 and earlier used the id `linear`. To upgrade from those versions, run `paseo plugin remove linear` first, then add the plugin again. Your saved keys stay in place.
+**Step 3 - Connect Linear**
 
-To pin a version, add it to the source, for example `npm:@yannelli/paseo-linear-plugin@0.1.0`. To install a Git tag instead, run `paseo plugin add github:yannelli/paseo-linear-plugin --ref v0.1.0`. Plugins run trusted code with the daemon user's access.
+Create a key in Linear under **Settings → Security & access → Personal API keys**. To change issues, add comments, or create issues, the key needs write access. Paste it in **Settings → Plugins → Linear → Account** and select **Connect Linear**.
 
-## Connect Linear
+To use `LINEAR_API_KEY` from the daemon's environment or a key per project instead, see [Connect Linear](docs/connect.md).
 
-### Default key
+Then open **Linear** from the sidebar, or type `/linear` in the composer.
 
-Open **Settings → Plugins → Linear → Account**, paste your key, and select **Connect Linear**. The Linear screen shows the same form until a key is set. The plugin checks the key with Linear before it saves it.
+### Other versions
 
-The daemon saves the key in `$PASEO_HOME/plugin-data/linear/credentials.json`, which is `~/.paseo/plugin-data/linear/credentials.json` by default. The file has mode `0600` and its folder has mode `0700`. A saved key takes effect at once. **Disconnect** deletes the saved key.
+- Pin a version: `npm:@yannelli/paseo-linear-plugin@1.2.1`
+- Install a Git tag: `paseo plugin add github:yannelli/paseo-linear-plugin --ref v1.2.1`
+- Upgrade from 0.4.0 or earlier: those used the id `linear`. Run `paseo plugin remove linear` first, then add the plugin again. Your saved keys stay in place.
 
-### Key from the environment
+Plugins run trusted code with the daemon user's access.
 
-If no key is saved, the plugin uses `LINEAR_API_KEY` from the environment that starts the daemon:
+## Docs
 
-```sh
-export LINEAR_API_KEY="lin_api_..."
-```
-
-A saved key takes precedence over the environment. To change the environment key, restart the daemon with the new value.
-
-### Project keys
-
-A Paseo project can use a different Linear key, for example for a different Linear workspace. In the **Project keys** section of the Account settings, choose the project, paste the key, and select **Save project key**.
-
-- The Linear panel in a workspace of that project uses the project key.
-- When project keys exist, the Linear screen shows a key button in the filter row. Use it to switch between **Default key** and the project keys.
-- The plugin looks for a key in this order: the project key, the saved default key, then `LINEAR_API_KEY`.
-- The composer attachment always uses the default key.
-
-## Use
-
-### Browse issues
-
-Open **Linear** from the sidebar, or run **Linear: Open issues** in the command center. In a workspace, run **Linear: Show issues in this workspace**, or type `/linear` in the composer. `/linear ENG-123` opens that issue, and `/linear <text>` searches.
-
-- The search box matches issue titles and descriptions. An identifier such as `ENG-123` shows that issue only.
-- Filter by assignee (**Mine**, **Everyone**, **Unassigned**), by status (**Active**, **Backlog**, **Done**, **All**), and by team.
-- The list groups issues by status and loads more as you scroll.
-- If you map Linear teams to a project in **Settings → Plugins → Linear → Projects**, the panel starts with the first mapped team.
-
-### Sort
-
-Select the sort button in the filter row. The options are **Last updated**, **Newest**, **Priority**, **Due date**, and **Title**.
-
-### Sub-issues
-
-Select **Sub-issues** in the filter row to nest sub-issues under their parent. A sub-issue shows under its parent when the parent is in the list, even if their statuses differ. Select the chevron to collapse or expand a parent. A collapsed parent shows how many sub-issues it hides.
-
-The issue header shows breadcrumbs: the team, the parent chain, then the issue, for example **Engineering › ENG-120 › ENG-123**. Select a parent to open it. A long chain folds its middle into **…**; select it to show all parents.
-
-### Read and edit an issue
-
-- Select the status, priority, or assignee chip to change it.
-- Descriptions and comments show as Markdown: headings, lists, task lists, code, quotes, tables, and links.
-- Select the pencil next to **Description** to edit it as Markdown. The plugin saves about one second after you stop typing, and when you leave the box. The line under the box shows **Saving…**, then **Saved to Linear**. If a save fails, it shows **Could not save** and a **Retry** button. **Done** (or Escape) closes the editor only after Linear accepts the text.
-- Select a task list checkbox in the description to check or uncheck it. The plugin changes only that box in the Markdown and saves it to Linear. If the save fails, the issue reloads from Linear.
-- Add a comment in the **Activity** section.
-- The header buttons refresh the issue, copy its branch name, and open it in Linear.
-- Select **New issue**, or run **Linear: Create issue**, to create an issue. Set the team, status, priority, assignee, title, and a Markdown description.
-
-### Start an agent
-
-Select **Start agent** or **Start review** in the issue view. The agent setup page opens in the panel or the screen. It works with or without a current workspace.
-
-1. Edit the prompt in the prompt box if you want. The prompt follows the template and options until you edit it. Select **Reset prompt** to go back to the template.
-2. Use the controls under the prompt box, as in the Paseo composer. They set the prompt template (Implement or Review), the model, the thinking level, and the mode. The thinking level shows when the model has levels, and the mode shows when the agent has modes.
-   - The model picker lists the providers first. Select a provider to see its models, or search to find models from all providers.
-   - Choosing a model from another provider also changes the agent. The thinking level and mode change to the choices you last used with that agent, or to its defaults.
-   - The controls start from your last choices: the model, thinking level, and mode of your last launch from the plugin, then the choices Paseo remembers for new agents. A default model in the settings takes priority for the model. On the mobile app, the plugin cannot read Paseo's choices, so it remembers only launches from the current session.
-3. Choose the **Project**. The default is the project of the current workspace. Without a workspace, it is the last project you used for the team, then a project mapped to the team.
-4. Choose where the agent runs in **Run in**:
-   - **New worktree** on the issue branch.
-   - **Check out PR #N** for a review, when the issue links a GitHub pull request.
-   - **Check out issue branch** for a review. If nobody pushed the branch yet, the plugin starts a new worktree on it.
-   - **Existing agent workspace** or **Implementation workspace**, when an agent already works on the issue.
-   - **This workspace**, or **Project folder** when you are not in a workspace of that project.
-
-   The worktree and checkout options show only for a Git project. When agents run in worktrees (the default), a review uses the pull request, then the implementation workspace, then the issue branch.
-5. Set the options: **Include comments in the prompt**, **Move the issue to In Progress**, and **Assign the issue to me**. The last two show only for Implement, and only when they would change the issue.
-6. Set the **Agent guidance** switches. Each one adds instructions to the prompt. The project keeps your choices for its next launch.
-   - **Keep Linear updated:** the agent edits the issue description as it works. It checks off each task list item it finishes and updates the plan when it changes. It posts comments and creates issues only when you ask. Todos start with their issue key, so todo sync can move each sub-issue.
-   - **Subagents state their issue key:** each subagent's description and prompt start with the key of the issue it works on. The subagent states the key again when its work moves to another issue.
-   - **Hand off work to Paseo agents:** the agent starts one Paseo agent for each sub-issue instead of its built-in subagents. Each one runs in the same workspace on the same provider and model, with thinking that fits its task, and checks off its own items.
-
-   **Keep Linear updated**, **Hand off work to Paseo agents**, and sub-issue agents give the agent the plugin's `linear` MCP server for the issue and its sub-issues. Its tools are `read_issue`, `edit_issue` (description), `update_issue` (status, assignee, priority, and title), `comment_issue`, and `create_issue` (a new sub-issue of the issue), and `start_agent` and `wait_agent` for agents on the sub-issues. Agents that `start_agent` starts get all of them except `start_agent` and `wait_agent`. Paseo allows these tools without a permission prompt. When the Linear tools are off for the project, **Hand off work to Paseo agents** is off, and **Keep Linear updated** only asks for issue keys in todos. If the tools do not start, the agent still starts, the message after the launch shows the error, and the prompt tells the agent not to look for a Linear CLI or API key. See [Agent settings](#agent-settings).
-
-   For Claude agents, these switches also add Claude Code hooks. With **Subagents state their issue key** on, each subagent gets the issue keys when it starts. With any switch on, the agent gets the issue again after Claude compacts the conversation. The hooks only print that text.
-7. For Implement on an issue with sub-issues, choose agents in **Sub-issue agents**. Select the chip next to a sub-issue to choose the agent and model, then the thinking chip to change the thinking level. Select **×** to remove the agent. The prompt lists the sub-issues with an agent, and the agent you start hands each of them off with `start_agent`, which runs it on the chosen agent. The chosen thinking level wins over the one the agent asks for. An agent of the same provider runs in the mode of the agent you start. It does the other sub-issues itself, or hands them off when **Hand off work to Paseo agents** is on.
-8. Select **Start agent** or **Start review**.
-
-The plugin starts the agent and then updates Linear. If the Linear update fails, the agent keeps running and a message shows the error. The agent's timeline gets a card that links to the issue. The issue view lists the agents started from it under **Agents on this issue**.
-
-Set the default model, where agents run, the default options, and the Implement and Review templates in **Settings → Plugins → Linear → Prompts**. In **Projects**, add instructions and steps for a project, append to or replace a template for that project, or give the project its own defaults.
-
-### Agent settings
-
-**Settings → Plugins → Linear → Agents** applies to all projects:
-
-- **Give agents the Linear tools:** agents get the `linear` MCP server. Agents started from an issue get it when an option needs it. When you turn it off, no new agent gets the server, and agents that have it get no tools from it. They get a message that the tools are off.
-- **Give every agent the Linear tools:** every other agent in a project with Linear on gets the `linear` MCP server when Paseo creates it, with the project's Linear key. This includes agents you start from the composer and agents with an attached issue. Its tools are `search_issues`, `read_issue`, `edit_issue`, `update_issue`, `comment_issue`, and `create_issue`, and they reach every issue the key reaches. Paseo allows `search_issues` and `read_issue` without a prompt. The other tools follow the agent's permission mode. Only Claude, Codex, OpenCode, and providers whose agents report MCP support get the server. Agents that existed before you turned this on do not get it.
-- **Let agents change issues:** the `edit_issue`, `update_issue`, `comment_issue`, and `create_issue` tools. When it is off, agents can only read issues.
-- **Choose agents for sub-issues:** shows **Sub-issue agents** on the agent setup page. Turn it off to hide the section.
-- **Agents at the same time:** how many agents one launch can run at the same time with `start_agent`. When the limit is reached, `start_agent` refuses until one of them finishes. The prompt gives the limit.
-- **Update Linear from agent todos:** moves sub-issues from the agent's todos. See [Update Linear from agent todos](#update-linear-from-agent-todos).
-
-The daemon reads the tool settings for each tool call, so a change applies to agents that already run.
-
-In **Projects**, the **Agent defaults for this project** and **Linear tools and sync for this project** sections give a project its own values: the model, where agents run, the three launch options, and the six settings above. Each one starts at **Same as all projects**, which shows the current value for all projects. The agent setup page uses the values of the project you choose.
-
-### Attach an issue to a message
-
-In the composer, open the attachment menu and choose **Attach Linear issue**. Type an identifier such as `ENG-123`, or words from a title. An empty search lists the 20 most recently updated issues. The agent gets the issue text with your message. The plugin takes this snapshot when you select the issue.
-
-### Turn Linear on or off per project
-
-In **Settings → Plugins → Linear → Projects**, **Use Linear in** has an **All projects** switch and one switch per Paseo project. A project switch wins over **All projects**. A project without its own switch follows **All projects**. Save to apply.
-
-In a project where Linear is off:
-
-- The workspace **Linear** panel shows that Linear is off.
-- Agents get no Linear pill.
-- The agent setup page does not offer the project.
-- Todo sync skips the project's agents.
-
-The **Linear** screen in the sidebar is not tied to a project, so it stays available. To turn off the whole plugin, use **Settings → Plugins**.
-
-### Linear pill
-
-Each agent's composer has a **Linear** pill. On an agent started from an issue, the pill shows the issue key. It opens the issue status, each sub-issue with its todo progress, and a button that opens the issue. When todo sync is on for the project, **Sync now** shows too. On other agents, the pill searches Linear and sends the issue text to the agent as a message.
-
-### Plugin icon
-
-In **Settings → Plugins → Linear → Icon**, choose an SVG file or paste SVG markup. Composer pills, the Linear sidebar row on Paseo 0.11 and newer, the issue card in the timeline, and the Linear screens then use it. The plugin accepts SVG only. It refuses scripts, event handlers, HTML content, entities, and links to other files or bitmap images. The SVG needs a viewBox, or a width and height in pixels.
-
-- **Color:** **Original colors** keeps the SVG as drawn, and `currentColor` takes the color Paseo gives the icon. **Theme color**, **Theme accent**, **Linear indigo**, and **Custom color** paint the whole icon one color and keep its transparency. These choices also apply to the built-in icon.
-- **Solid:** fills shapes that only have an outline, with their stroke color, so a line icon shows as a solid shape.
-- **Built-in icon:** Paseo draws panel tabs, the new tab menu, and Command Center with built-in Lucide icons only, so your SVG cannot show there. Pick the built-in icon for those places, such as Rocket or Target. Without an SVG, every place uses it. Tabs that are open change when you reload Paseo or open them again. The web app keeps the choice on the device, so the tabs get it as Paseo starts.
-
-The preview shows each change before you save. The iOS and Android apps cannot draw SVG images from plugins, so they show the built-in icon in the chosen color.
-
-### Update Linear from agent todos
-
-Turn on **Update Linear from agent todos** in **Settings → Plugins → Linear → Agents**, or for one project in **Projects**. For implement agents on an issue with sub-issues, the prompt asks the agent to start each todo with its sub-issue key, such as `ENG-124: add the queue`. After each turn of an implement agent, the daemon reads the agent's todos:
-
-- A sub-issue with a todo in progress or done moves to the team's first started status, such as In Progress.
-- A sub-issue whose todos are all done moves to the team's first completed status, such as Done.
-- The parent moves to In Progress when work starts. When every sub-issue is done, it moves to a started status whose name has "review", such as In Review. It never moves to Done by itself.
-- Statuses only move forward. Canceled issues and issues outside the parent and its sub-issues never change.
-
-The daemon reads the issue from Linear before each sync, so a status you changed by hand counts. **Sync now** in the pill runs the same check at once.
-
-### Set up project prompts with an agent
-
-In **Settings → Plugins → Linear → Projects**, select **Start** under **Set up with an agent**. The agent runs on the project's default model. While it runs, **Open agent** opens the setup agent so you can watch it. The agent finds and reads the project's AGENTS.md, CLAUDE.md, CONTRIBUTING, README, scripts, and CI files, and in a monorepo the guidance files of each package. It then proposes project instructions, steps, and text to add to the Implement and Review prompts. Each change shows the current and proposed text. Turn off the ones you do not want, select **Use accepted changes**, and then save. Nothing changes until you save.
-
-The setup agent is told to only read. The plugin starts it in a mode that asks before tool use when the provider has one: **Always Ask** for Claude, never a bypass mode. When the agent asks for permission, the plugin answers. It allows file reads inside the project folder and these commands: `ls`, `find`, `rg`, `grep`, `cat`, `head`, `tail`, `wc`, `git ls-files`, and `git grep`. It denies other commands, flags that run programs or follow links, edits, web requests, redirection, and existing paths outside the folder, also through links. It expands wildcards and checks each match. A search pattern that looks like a path, such as `/api`, is not a path. The plugin sees only the requests the provider raises: Claude runs some read commands without asking, and Codex has no read-only mode, so it runs in its default mode and its own sandbox decides what needs a request.
-
-## Data and permissions
-
-- **Your key stays on the daemon host.** When you save a key, the app sends it to the daemon once. The daemon never sends a key back to the app. The app gets only the last four characters, to show which key is in use. Only the daemon sends requests to `https://api.linear.app/graphql`.
-- **Data sent to Linear:** queries for issues, teams, users, and comments, and the changes you make. When you start an agent with the options on, the plugin moves the issue to In Progress and assigns it to you.
-- **Data sent to the agent provider:** the prompt. It holds the template text and an issue snapshot: identifier, title, URL, team, status, priority, assignee, project, labels, parent, description, sub-issues, and links. It holds comments only when **Include comments in the prompt** is on. It also holds the project instructions and steps from the Projects settings. An attached issue sends the identifier, title, URL, status, priority, assignee, project, labels, and description.
-- **Setup agent:** it reads files in the project, and your agent provider gets what it reads.
-- **Linear tools for agents:** the daemon runs the `linear` MCP server on `127.0.0.1` only, and only after an agent gets it. When the tools are off for a project, its agents get no tools. Each agent started from an issue gets its own random token, and its tools reach only its issue and that issue's sub-issues. Edits use the Linear key of the project that loaded the issue. With **Give every agent the Linear tools** on, the other agents of a project share a token signed for that project, and their tools reach every issue of the project's key. Requests from a web page are refused. `agent-tools.json` beside the key file keeps the port, a hash of each issue token, and the secret that signs project tokens, so agents keep their tools after a restart. The token itself is in the agent's Paseo config.
-- **Claude hooks:** when an **Agent guidance** switch is on for a Claude agent, the daemon writes a Claude Code plugin to `claude-hooks/` beside the key file, one folder for each issue and set of hooks. It holds the issue key and title and the sub-issue keys and titles. The agent starts with `--plugin-dir` set to that folder. The hooks print that text and run no other command. The daemon does not write hooks on Windows hosts.
-- **Todo sync:** when it is on for the agent's project, the daemon changes issue statuses in Linear with the key of the project that loaded the issue.
-- **Plugin icon:** the SVG is saved in the plugin settings on the daemon host. The app draws it as an image, which does not run scripts or load other files. The web app keeps the name of the built-in icon in its local storage.
-- **Cached results:** the daemon keeps up to 300 recent Linear responses in memory for up to 24 hours. It groups them by a hash of the key, so two keys never share results. The app shows saved results at once with **Showing saved results. Updating…** while it gets new data. An edit clears the cached lists and issues for that key. Saving or removing a key clears the whole cache. The cache is not written to disk, and a daemon restart clears it.
-
-Linear errors, such as a rejected key or a rate limit, show in the panel or as a message.
-
-## How it works
-
-| File | Runtime | Role |
-| --- | --- | --- |
-| `index.client.tsx` | App | Registers the Linear screen, the workspace panel, the Account, Prompts, Agents, Icon, and Projects settings, the command center items, the `/linear` command, the timeline card, the composer attachment, and the Linear pill |
-| `index.server.ts` | Daemon | Registers the settings, the RPC handlers, and the todo sync hook |
-| `client/browser.tsx` | App | Screen and panel: picks the key, then shows the list, the issue, or the agent setup page |
-| `client/issue-list.tsx`, `client/issue-row.tsx`, `client/issue-tree.ts` | App | Search, filters, sort, rows, status groups, and sub-issue nesting |
-| `client/issue-detail.tsx`, `client/issue-sections.tsx`, `client/breadcrumbs.tsx` | App | Issue view: properties, breadcrumbs, sub-issues, links, agents, and comments |
-| `client/issue-description.tsx`, `client/autosave.ts` | App | Description editor, task list checkboxes, and debounced saves |
-| `client/markdown.tsx` | App | Renders Markdown |
-| `client/launch.tsx`, `client/launch-fields.tsx`, `client/launch-guidance.tsx`, `client/launch-assignments.tsx`, `client/launch-choices.ts`, `client/launch-plan.ts`, `client/agent-options.ts` | App | Agent setup page, Run in options, agent guidance, sub-issue agents, and agent start |
-| `client/model-browser.tsx`, `client/provider-icon.tsx` | App | Model picker and provider icons |
-| `client/plugin-icon.tsx`, `client/settings-icon.tsx`, `shared/custom-icon.ts` | App, Both | The plugin icon, its settings screen, and the SVG checks, colors, and fill |
-| `client/create-issue.tsx`, `client/pickers.tsx` | App | New issue form and option pickers |
-| `client/connect.tsx`, `client/settings-*.tsx` | App | Key form and settings screens, with the Agents screen and the project's own values in `settings-agents.tsx` and `settings-overrides.tsx` |
-| `client/queries.ts`, `client/store.ts`, `client/key-scope.tsx` | App | Data hooks with saved results, browser state, and the key in use |
-| `client/compat.ts` | App | Registers the screen on Paseo 0.10 and on later releases |
-| `client/timeline-card.tsx`, `client/ui.tsx`, `client/glyphs.tsx` | App | Timeline card, shared controls, and icons |
-| `client/web.ts` | App | File picker and local storage on the web |
-| `client/pill.tsx` | App | Linear pill in each agent's composer |
-| `client/project-init.tsx` | App | Project setup proposal in the Projects settings |
-| `shared/linear.ts` | Both | RPC contracts and issue schemas |
-| `shared/issues.ts` | Both | The `issues.search` RPC and the composer attachment source |
-| `shared/settings.ts` | Both | Settings schema: templates, agent defaults, Linear tools, and project settings with their own values |
-| `shared/prompts.ts` | Both | Default templates and the issue snapshot |
-| `shared/markdown.ts` | Both | Markdown parser and task list toggle |
-| `shared/key-queue.ts` | Both | Runs saves, edits, syncs, and agent starts for one key at a time |
-| `shared/agent-hooks.ts`, `server/agent-hooks.ts` | Both, Daemon | Claude Code hooks for agent guidance, and the plugin folder the daemon writes |
-| `shared/agent-tools.ts`, `server/agent-tools.ts`, `server/mcp-http.ts` | Both, Daemon | The `linear` MCP server: its tools, tokens, and HTTP transport |
-| `server/issue-tools.ts`, `server/project-tools.ts` | Daemon | The Linear tools of the MCP server, and the hook that gives them to every agent of a project |
-| `shared/todo-sync.ts`, `shared/project-setup.ts` | Both | Todo keys, status moves, the sync and setup RPCs, and setup proposals |
-| `server/handlers.ts` | Daemon | RPC handlers, key lookup, and cache use |
-| `server/credentials.ts` | Daemon | Key file and key order |
-| `server/cache.ts` | Daemon | Response cache in memory |
-| `server/graphql.ts`, `server/queries.ts` | Daemon | Linear GraphQL client, queries, and changes |
-| `server/linear.ts` | Daemon | Search and snapshot text for the composer attachment |
-| `server/agent-runs.ts`, `server/json-file.ts` | Daemon | The read-only setup agent run and its permission answers, and JSON files on disk |
-| `server/sync.ts`, `server/init.ts` | Daemon | Todo sync after each turn, and project setup runs |
-
-The client bundle holds no credentials and makes no calls to Linear.
+| Guide | What's in it |
+| --- | --- |
+| [Connect Linear](docs/connect.md) | The default key, `LINEAR_API_KEY`, project keys, and which key wins |
+| [Issues](docs/issues.md) | Browsing, sorting, sub-issues, editing, attachments, the Linear pill, and Linear per project |
+| [Agents](docs/agents.md) | The agent setup page, agent guidance, sub-issue agents, agent settings, todo sync, and project setup |
+| [Plugin icon](docs/icon.md) | The plugin mark, your own SVG, and how they're painted |
+| [Data and permissions](docs/data-and-permissions.md) | What goes to Linear and your agent provider, and what the daemon stores |
+| [How it works](docs/architecture.md) | What each source file does, in the app and on the daemon |
 
 ## Development
 
@@ -267,39 +94,12 @@ npm run check
 paseo plugin add "$PWD"
 ```
 
-After you edit the source, run `paseo plugin reload paseo-linear-plugin`. `npm run check` runs the typecheck and the tests. The tests cover the Linear client, the key file, the cache, the handlers, sub-issue nesting, the Markdown parser and task list toggle, the description autosave, the agent options, the prompt guidance and its hooks, the MCP server and its tools with their settings, the project tools for every agent, sub-issue agents, todo sync, the read-only setup agent, the project's own settings, the SVG icon checks and colors, and the release scripts. They use a local GraphQL server and do not call Linear.
+`npm run check` runs the typecheck and the tests. The tests use a local GraphQL server and don't call Linear. After you edit the source, run `paseo plugin reload paseo-linear-plugin`.
 
-## Graphics
-
-`docs/graphics/scene.html` and `scene.css` define the README images, the GitHub social preview, and the icon. Render them into `docs/images` with Playwright and Chromium:
-
-```sh
-node docs/graphics/render.mjs
-```
-
-The script finds Playwright locally or in the global npm root. Set `PLAYWRIGHT_MODULE` to its entry file to choose another copy. It stops if the fonts do not load, if content leaves the frame or is cut off, or if an image is 900 KB or larger. The fonts are Instrument Sans and JetBrains Mono under the [SIL Open Font License](docs/graphics/fonts/OFL.txt). The line icons follow [Lucide](https://lucide.dev), which uses the ISC License. The mark is original and is not the Linear logo.
-
-## Releases
-
-GitHub Actions runs the checks and publishes a release on qualifying pushes to `main`. The first release is `v0.1.0`. The workflow updates `package.json` and `package-lock.json`, pushes an annotated tag, and publishes release notes. It then publishes [`@yannelli/paseo-linear-plugin`](https://www.npmjs.com/package/@yannelli/paseo-linear-plugin) to npm through trusted publishing (OIDC), with no npm token. See [npm publishing](docs/npm-publishing.md) for the first-publish steps.
-
-Use Conventional Commits in commits and squash-merge titles:
-
-| Commit | Version change |
-| --- | --- |
-| `fix:`, `perf:`, `revert:` | Patch |
-| `feat:` | Minor |
-| `!` after the type or scope, or a `BREAKING CHANGE:` footer | Major, including before 1.0 |
-| `docs:`, `chore:`, `ci:`, and other types without a breaking marker | No release |
-
-The highest change since the last release sets the next version. For example, `fix: trim identifier queries` changes `0.1.0` to `0.1.1`, and `feat: filter by project` changes it to `0.2.0`.
-
-Run `npm run release:dry-run` from a clean `main` checkout with all tags fetched to preview the next release. To complete a GitHub or npm publication that stopped after its tag was pushed, run the **Release** workflow again.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, checks, commit message rules, and how releases work.
+[CONTRIBUTING.md](CONTRIBUTING.md) covers the checks, commit messages, the graphics, and releases. Report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
 Apache License 2.0. The plugin started as the Linear example plugin (`plugin-examples/linear`) in [getpaseo/paseo](https://github.com/getpaseo/paseo). See [NOTICE](NOTICE).
+
+Maintained by [Ryan Yannelli](https://ryanyannelli.com).

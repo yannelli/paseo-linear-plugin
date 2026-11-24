@@ -138,7 +138,6 @@ export default function contribute(client: PluginClientContext) {
   registerScreen(client, {
     id: SCREEN_ID,
     title: "Linear",
-    icon: BUILT_IN_ICON,
     RowIcon: PluginIcon,
     Component: LinearScreen,
   });
