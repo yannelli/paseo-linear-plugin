@@ -1,10 +1,10 @@
 import { useSettings } from "@getpaseo/plugin/client";
 import { Icon } from "@getpaseo/plugin/client/react-native";
-import { useEffect, useMemo } from "react";
+import * as hostUi from "@getpaseo/plugin/client/ui";
+import { type ComponentType, useEffect, useMemo } from "react";
 import { Image, Platform } from "react-native";
 import { BUILT_IN_ICON, type IconSettings, iconMarkup, markSvg, paintColor } from "../shared/custom-icon";
 import { linearSettings } from "../shared/settings";
-import { HostSvgIcon } from "./compat";
 import { svgDataUri } from "./provider-icon";
 import type { Theme } from "./ui";
 import { readStored, writeStored } from "./web";
@@ -12,6 +12,11 @@ import { readStored, writeStored } from "./web";
 // The plugin's icon in pills, the sidebar, and plugin screens: the user's SVG, or the mark without
 // one. Native apps cannot draw SVG images, so they draw the mark through Paseo 0.13 and later, and
 // the chosen built-in icon in place of a user's SVG or on older releases.
+
+/** Paseo 0.13 and later export Icon, which draws inline SVG on web, iOS, and Android. Older releases: undefined. */
+const HostSvgIcon = (hostUi as Record<string, unknown>).Icon as
+  | ComponentType<{ icon: { svg: string }; size: number; color: string }>
+  | undefined;
 
 // Panels and Command Center items take a Lucide name when they register, outside React.
 // Components that read the settings share the chosen name here. Paseo keeps the icon an open

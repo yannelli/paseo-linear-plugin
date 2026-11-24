@@ -6,7 +6,7 @@ What each source file does, and whether it runs in the app or on the daemon.
 
 | File | Runtime | Role |
 | --- | --- | --- |
-| `index.client.tsx` | App | Registers the Linear screen, the workspace panel, the Account, Prompts, Agents, Icon, and Projects settings, the command center items, the `/linear` command, the timeline card, the composer attachment, and the Linear pill |
+| `index.client.tsx` | App | Registers the Linear screen and its sidebar row, the workspace panel, the Account, Prompts, Agents, Icon, and Projects settings, the command center items, the `/linear` command, the timeline card, the composer attachment, and the Linear pill |
 | `index.server.ts` | Daemon | Registers the settings, the RPC handlers, and the todo sync hook |
 | `client/browser.tsx` | App | Screen and panel: picks the key, then shows the list, the issue, or the agent setup page |
 | `client/issue-list.tsx`, `client/issue-row.tsx`, `client/issue-tree.ts` | App | Search, filters, sort, rows, status groups, and sub-issue nesting |
@@ -19,7 +19,6 @@ What each source file does, and whether it runs in the app or on the daemon.
 | `client/create-issue.tsx`, `client/pickers.tsx` | App | New issue form and option pickers |
 | `client/connect.tsx`, `client/settings-*.tsx` | App | Key form and settings screens, with the Agents screen and the project's own values in `settings-agents.tsx` and `settings-overrides.tsx` |
 | `client/queries.ts`, `client/store.ts`, `client/key-scope.tsx` | App | Data hooks with saved results, browser state, and the key in use |
-| `client/compat.ts` | App | Registers the screen and its sidebar row, and finds the SVG icons of Paseo 0.13 and newer |
 | `client/timeline-card.tsx`, `client/ui.tsx`, `client/glyphs.tsx` | App | Timeline card, shared controls, and icons |
 | `client/web.ts` | App | File picker and local storage on the web |
 | `client/pill.tsx` | App | Linear pill in each agent's composer |

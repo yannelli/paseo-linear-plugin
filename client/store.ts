@@ -2,8 +2,8 @@ import { useCallback, useSyncExternalStore } from "react";
 import type { AssigneeFilter, IssueSort, StatusFilter } from "../shared/linear";
 import type { AgentAction } from "../shared/settings";
 
-// In-memory navigation state per browser scope ("screen" or a workspace panel). Paseo 0.10
-// screens take no params, so commands write the focused issue here before opening a surface.
+// In-memory navigation state per browser scope ("screen" or a workspace panel). Commands write
+// the focused issue here before they open the screen or a panel.
 export interface BrowserState {
   issueId: string | null;
   teamId: string | null;

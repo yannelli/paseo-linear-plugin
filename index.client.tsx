@@ -1,6 +1,7 @@
-import type { PluginClientContext } from "@getpaseo/plugin/client";
+import type { PluginClientContext, PluginSidebarItemProps } from "@getpaseo/plugin/client";
+import { SidebarRow } from "@getpaseo/plugin/client/ui";
+import { createContext, useContext } from "react";
 import { LinearPanel, LinearScreen } from "./client/browser";
-import { openPluginScreen, registerScreen } from "./client/compat";
 import { contributeComposerPills } from "./client/pill";
 import { onMenuIconChange, PluginIcon, startMenuIcon } from "./client/plugin-icon";
 import { AgentSettings } from "./client/settings-agents";
@@ -10,6 +11,7 @@ import { ProjectSettings } from "./client/settings-projects";
 import { PromptSettings } from "./client/settings-prompts";
 import { focusIssue, panelScope, SCREEN_SCOPE, updateBrowser } from "./client/store";
 import { IssueCardRow } from "./client/timeline-card";
+import type { Theme } from "./client/ui";
 import { BUILT_IN_ICON } from "./shared/custom-icon";
 import { issueAttachments } from "./shared/issues";
 import { ISSUE_CARD_KIND, IssueCardSchema, LINEAR_IDENTIFIER } from "./shared/linear";
@@ -44,8 +46,8 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         icon,
         keywords: ["linear", "issues", "tickets"],
         context: "global",
-        onSelect(context) {
-          openPluginScreen(context, SCREEN_ID);
+        onSelect({ openScreen }) {
+          openScreen({ screenId: SCREEN_ID });
         },
       }),
     () =>
@@ -55,9 +57,9 @@ function contributeMenus(client: PluginClientContext, icon: string): Cleanup {
         icon: "Plus",
         keywords: ["linear", "new", "ticket"],
         context: "global",
-        onSelect(context) {
+        onSelect({ openScreen }) {
           updateBrowser(SCREEN_SCOPE, { creating: true });
-          openPluginScreen(context, SCREEN_ID);
+          openScreen({ screenId: SCREEN_ID });
         },
       }),
     () =>
@@ -133,14 +135,29 @@ function contributeMenusWithIcon(client: PluginClientContext): Cleanup {
   };
 }
 
+// SidebarRow draws its icon with a size and a color only, so the item passes its theme down.
+const RowTheme = createContext<Theme | null>(null);
+
+function RowIcon(props: { size: number; color: string }) {
+  return <PluginIcon {...props} theme={useContext(RowTheme)} />;
+}
+
+function SidebarItem({ theme, currentScreen, openScreen }: PluginSidebarItemProps) {
+  return (
+    <RowTheme.Provider value={theme}>
+      <SidebarRow
+        icon={RowIcon}
+        active={currentScreen?.screenId === SCREEN_ID}
+        onPress={() => openScreen({ screenId: SCREEN_ID })}
+      />
+    </RowTheme.Provider>
+  );
+}
+
 export default function contribute(client: PluginClientContext) {
   client.addAttachmentSource(issueAttachments);
-  registerScreen(client, {
-    id: SCREEN_ID,
-    title: "Linear",
-    RowIcon: PluginIcon,
-    Component: LinearScreen,
-  });
+  client.addScreen({ id: SCREEN_ID, title: "Linear", Component: LinearScreen });
+  client.addSidebarHeaderItem({ id: SCREEN_ID, title: "Linear", Component: SidebarItem });
   client.addSettingsScreen({
     id: "connection",
     title: "Account",
