@@ -189,7 +189,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
             label="Preview"
             hint={
               native
-                ? "The iOS and Android apps cannot draw plugin SVG images, so they show the built-in icon in the color you choose."
+                ? "The iOS and Android apps draw the plugin mark on Paseo 0.13 and newer. In place of your SVG, they show the built-in icon below in the color you choose."
                 : "Composer pills, the Linear sidebar row, and Linear screens use this icon. Panel tabs and menus use the built-in icon below."
             }
           >
@@ -206,7 +206,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
           <MultilineField
             theme={theme}
             label="SVG markup"
-            hint="Paste SVG markup, or edit it here. Scripts, links to other files, and bitmap images are not allowed. Clear it to use the built-in icon."
+            hint="Paste SVG markup, or edit it here. Scripts, links to other files, and bitmap images are not allowed. Clear it to use the plugin mark."
             value={markup}
             placeholder={'<svg viewBox="0 0 24 24">…</svg>'}
             error={markupError}
@@ -215,7 +215,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
           />
           <SettingsAction
             label="Remove SVG"
-            hint="Use the built-in icon everywhere."
+            hint="Go back to the plugin mark."
             actionLabel="Remove"
             disabled={!custom && markup === ""}
             onPress={removeSvg}
@@ -243,7 +243,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
           ) : null}
           <SettingsSwitch
             label="Solid"
-            hint={custom ? "Fill shapes that only have an outline, so line icons show as solid shapes." : "Add an SVG to use this. Built-in icons stay as drawn."}
+            hint={custom ? "Fill shapes that only have an outline, so line icons show as solid shapes." : "Add an SVG to use this. The plugin mark and built-in icons stay as drawn."}
             value={icon.solid}
             disabled={!custom}
             onValueChange={(solid) => change({ solid })}
@@ -254,7 +254,7 @@ function IconEditor({ theme, settings }: { theme: Theme; settings: ReadySettings
         <SettingsCard>
           <SettingsSelect
             label="Built-in icon"
-            hint="Panel tabs, the new tab menu, and Command Center take built-in icons only, so they use this one. Without an SVG, every place uses it. Tabs that are open change when you reload Paseo or open them again."
+            hint="Panel tabs, the new tab menu, and Command Center take built-in icons only, so they use this one. Tabs that are open change when you reload Paseo or open them again."
             value={icon.menu}
             options={menuOptions}
             onValueChange={(menu) => change({ menu })}

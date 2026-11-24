@@ -1,4 +1,4 @@
-// Renders the README images, the GitHub social preview, and the icon from scene.html.
+// Renders the README images in light and dark, the GitHub social preview, and the icon from scene.html.
 // Usage: node docs/graphics/render.mjs [out-dir]   (defaults to docs/images)
 // Needs Playwright with Chromium. Set PLAYWRIGHT_MODULE to its entry file when it is not resolvable.
 import assert from "node:assert/strict";
@@ -25,11 +25,12 @@ const { chromium } = playwright.default ?? playwright;
 const root = fileURLToPath(new URL(".", import.meta.url));
 const outDir = resolve(process.argv[2] ?? join(root, "..", "images"));
 const MAX_BYTES = 900 * 1024;
+const THEMES = ["dark", "light"];
+// hero-dark.png is also the GitHub social preview.
 const outputs = [
-  { scene: "social", file: "social-preview.png" },
-  { scene: "browse", file: "browse.png" },
-  { scene: "launch", file: "launch.png" },
-  { scene: "keys", file: "keys.png" },
+  ...["hero", "browse", "launch", "keys"].flatMap((scene) =>
+    THEMES.map((theme) => ({ scene, theme, file: `${scene}-${theme}.png`, transparent: scene !== "hero" })),
+  ),
   { scene: "icon", file: "icon.png", transparent: true },
 ];
 
@@ -42,12 +43,12 @@ async function pngSize(file) {
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const { scene, file, transparent } of outputs) {
+  for (const { scene, theme, file, transparent } of outputs) {
     const tab = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 2 });
     const failures = [];
     tab.on("pageerror", (error) => failures.push(error.message));
     await tab.goto(pathToFileURL(join(root, "scene.html")).href);
-    const layout = await tab.evaluate((name) => window.renderScene(name), scene);
+    const layout = await tab.evaluate(([sceneName, themeName]) => window.renderScene(sceneName, themeName), [scene, theme]);
     assert.equal(layout.fonts, true, `${scene}: fonts did not load`);
     assert.deepEqual(layout.problems, [], `${scene}: layout problems`);
     await tab.setViewportSize({ width: layout.width, height: layout.height });

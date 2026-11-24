@@ -24,6 +24,7 @@
     "paseo-plugin.json",
     "OVERVIEW.md",
     "NOTICE",
+    "docs/images/icon.png",
     "index.client.tsx",
     "index.server.ts",
     "client/",

@@ -2,8 +2,8 @@ import type { PluginClientContext, PluginSurfaceProps } from "@getpaseo/plugin/c
 import * as hostUi from "@getpaseo/plugin/client/ui";
 import { type ComponentType, createContext, createElement, useContext } from "react";
 
-// Paseo 0.11 replaced surfaces with screens and sidebar header items. 0.10 only has
-// addSurface/addSidebarItem; later releases drop those aliases. Detect once, register once.
+// The plugin builds against the Paseo 0.10 types and runs on 0.11 and later. These shapes cover
+// the parts of the newer host it uses.
 type Cleanup = () => void;
 
 interface ScreenRef {
@@ -29,33 +29,30 @@ interface ScreenClient {
   }): Cleanup;
 }
 
-interface SurfaceClient {
-  addSurface(id: string, Component: ComponentType<PluginSurfaceProps>): Cleanup;
-  addSidebarItem(input: { id: string; title: string; icon: string; surface: string }): Cleanup;
-}
-
 interface RowIconProps {
   size: number;
   color: string;
 }
 
 type SidebarRowComponent = ComponentType<{
-  icon?: string | ComponentType<RowIconProps>;
+  icon?: ComponentType<RowIconProps>;
   label?: string;
   active?: boolean;
   onPress(): void;
 }>;
 
-function hasScreens(client: object): client is ScreenClient {
-  return "addScreen" in client && typeof client.addScreen === "function";
-}
+const host = hostUi as Record<string, unknown>;
+
+/** Paseo 0.13 and later draw inline SVG icons, also in the iOS and Android apps. Older releases: undefined. */
+export const HostSvgIcon = host.Icon as
+  | ComponentType<{ icon: { svg: string }; size: number; color: string }>
+  | undefined;
 
 export interface ScreenRegistration {
   id: string;
   title: string;
-  icon: string;
-  /** Drawn in the sidebar row where the host accepts icon components; else `icon`. */
-  RowIcon?: ComponentType<RowIconProps & { theme: PluginSurfaceProps["theme"] | null }>;
+  /** Drawn in the sidebar row. */
+  RowIcon: ComponentType<RowIconProps & { theme: PluginSurfaceProps["theme"] | null }>;
   Component: ComponentType<PluginSurfaceProps>;
 }
 
@@ -63,63 +60,36 @@ export interface ScreenRegistration {
 const RowTheme = createContext<PluginSurfaceProps["theme"] | null>(null);
 
 export function registerScreen(client: PluginClientContext, screen: ScreenRegistration): Cleanup {
-  const SidebarRow = (hostUi as Record<string, unknown>).SidebarRow as
-    | SidebarRowComponent
-    | undefined;
-  if (hasScreens(client) && SidebarRow) {
-    const removeScreen = client.addScreen({
-      id: screen.id,
-      title: screen.title,
-      Component: screen.Component,
-    });
-    const { RowIcon } = screen;
-    const ThemedIcon = RowIcon
-      ? function ThemedIcon(props: RowIconProps) {
-          return createElement(RowIcon, { ...props, theme: useContext(RowTheme) });
-        }
-      : null;
-    function SidebarItem({ currentScreen, openScreen, theme }: SidebarItemProps) {
-      const row = createElement(SidebarRow as SidebarRowComponent, {
-        icon: ThemedIcon ?? screen.icon,
-        active: currentScreen?.screenId === screen.id,
-        onPress: () => openScreen({ screenId: screen.id }),
-      });
-      return createElement(RowTheme.Provider, { value: theme ?? null }, row);
-    }
-    const removeItem = client.addSidebarHeaderItem({
-      id: screen.id,
-      title: screen.title,
-      Component: SidebarItem,
-    });
-    return () => {
-      removeItem();
-      removeScreen();
-    };
-  }
-  const legacy = client as unknown as SurfaceClient;
-  const removeSurface = legacy.addSurface(screen.id, screen.Component);
-  const removeItem = legacy.addSidebarItem({
+  const screens = client as unknown as ScreenClient;
+  const SidebarRow = host.SidebarRow as SidebarRowComponent;
+  const removeScreen = screens.addScreen({
     id: screen.id,
     title: screen.title,
-    icon: screen.icon,
-    surface: screen.id,
+    Component: screen.Component,
+  });
+  const { RowIcon } = screen;
+  function ThemedIcon(props: RowIconProps) {
+    return createElement(RowIcon, { ...props, theme: useContext(RowTheme) });
+  }
+  function SidebarItem({ currentScreen, openScreen, theme }: SidebarItemProps) {
+    const row = createElement(SidebarRow, {
+      icon: ThemedIcon,
+      active: currentScreen?.screenId === screen.id,
+      onPress: () => openScreen({ screenId: screen.id }),
+    });
+    return createElement(RowTheme.Provider, { value: theme ?? null }, row);
+  }
+  const removeItem = screens.addSidebarHeaderItem({
+    id: screen.id,
+    title: screen.title,
+    Component: SidebarItem,
   });
   return () => {
     removeItem();
-    removeSurface();
+    removeScreen();
   };
 }
 
-interface NavigationCapabilities {
-  openScreen?: (input: ScreenRef) => void;
-  openSurface?: (id: string) => void;
-}
-
 export function openPluginScreen(capabilities: object, screenId: string): void {
-  const navigation = capabilities as NavigationCapabilities;
-  if (typeof navigation.openScreen === "function") {
-    navigation.openScreen({ screenId });
-    return;
-  }
-  navigation.openSurface?.(screenId);
+  (capabilities as { openScreen(input: ScreenRef): void }).openScreen({ screenId });
 }

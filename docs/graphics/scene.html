@@ -2,18 +2,30 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Linear issues for Paseo graphics</title>
+<title>Linear for Paseo graphics</title>
 <link rel="stylesheet" href="scene.css">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="mark" viewBox="0 0 40 32">
-    <circle class="ring" cx="13" cy="16" r="9.6"/>
-    <circle class="core" cx="13" cy="16" r="3.6"/>
-    <path class="arrow" d="M27 9.5 33.5 16 27 22.5"/>
+  <defs>
+    <linearGradient id="tile-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d1e25"/><stop offset="1" stop-color="#09090b"/></linearGradient>
+    <linearGradient id="tile-edge" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="1" stop-color="#fff" stop-opacity="0.03"/></linearGradient>
+    <radialGradient id="tile-glow"><stop offset="0" stop-color="#5e6ad2" stop-opacity="0.55"/><stop offset="1" stop-color="#5e6ad2" stop-opacity="0"/></radialGradient>
+    <linearGradient id="slab-top" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9ba3f5"/><stop offset="1" stop-color="#7580e3"/></linearGradient>
+  </defs>
+  <symbol id="logo" viewBox="0 0 100 100">
+    <rect width="100" height="100" rx="23" fill="url(#tile-fill)"/>
+    <circle cx="50" cy="34" r="40" fill="url(#tile-glow)"/>
+    <rect x="0.5" y="0.5" width="99" height="99" rx="22.5" fill="none" stroke="url(#tile-edge)"/>
+    <g stroke-width="1.2" stroke-linejoin="round" stroke-linecap="round">
+      <polygon points="25.5,61 50,75.15 50,81.45 25.5,67.3" fill="#2e2e34" stroke="#2e2e34"/><polygon points="50,75.15 74.5,61 74.5,67.3 50,81.45" fill="#232328" stroke="#232328"/><polygon points="50,46.85 74.5,61 50,75.15 25.5,61" fill="#3f3f46" stroke="#3f3f46"/><polyline points="25.5,61 50,75.15 74.5,61" fill="none" stroke="#fff" stroke-opacity="0.1" stroke-width="0.7"/>
+      <polygon points="25.5,49 50,63.15 50,69.45 25.5,55.3" fill="#55555d" stroke="#55555d"/><polygon points="50,63.15 74.5,49 74.5,55.3 50,69.45" fill="#43434a" stroke="#43434a"/><polygon points="50,34.85 74.5,49 50,63.15 25.5,49" fill="#71717a" stroke="#71717a"/><polyline points="25.5,49 50,63.15 74.5,49" fill="none" stroke="#fff" stroke-opacity="0.16" stroke-width="0.7"/>
+      <polygon points="25.5,33 50,47.15 50,53.45 25.5,39.3" fill="#5e6ad2" stroke="#5e6ad2"/><polygon points="50,47.15 74.5,33 74.5,39.3 50,53.45" fill="#4652b8" stroke="#4652b8"/><polygon points="50,18.85 74.5,33 50,47.15 25.5,33" fill="url(#slab-top)" stroke="url(#slab-top)"/><polyline points="25.5,33 50,47.15 74.5,33" fill="none" stroke="#fff" stroke-opacity="0.5" stroke-width="0.7"/>
+    </g>
   </symbol>
   <!-- Line icons drawn after Lucide (ISC license), the icon set Paseo uses. -->
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
   <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
   <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
   <symbol id="i-arrow-up-down" viewBox="0 0 24 24"><path d="m21 16-4 4-4-4M17 20V4M3 8l4-4 4 4M7 4v16"/></symbol>
@@ -47,8 +59,8 @@
 <script>
 // Sample data only. Identifiers, people, and projects are invented.
 const STATES = {
-  progress: { name: 'In Progress', icon: 'circle-dot', color: '#f2c94c' },
-  todo: { name: 'Todo', icon: 'circle', color: '#e2e2e2' },
+  progress: { name: 'In Progress', icon: 'circle-dot' },
+  todo: { name: 'Todo', icon: 'circle' },
 };
 const PRIORITIES = { 0: 'minus', 1: 'triangle-alert', 2: 'signal-high', 3: 'signal-medium', 4: 'signal-low' };
 const ISSUE_ROWS = [
@@ -80,7 +92,7 @@ const iconButton = (icon) => `<span class="icon-btn">${ic(icon)}</span>`;
 
 function stateIcon(key) {
   const state = STATES[key];
-  return `<svg class="i" style="color:${state.color}"><use href="#i-${state.icon}"/></svg>`;
+  return `<svg class="i" style="color:var(--state-${key})"><use href="#i-${state.icon}"/></svg>`;
 }
 
 function priorityIcon(priority) {
@@ -224,36 +236,26 @@ function settingsWindow() {
   </div>`;
 }
 
-function featurePage(title, sub, windowHtml) {
-  return `<div class="page"><h1 class="block">${title}</h1><p class="sub block">${sub}</p>${windowHtml}</div>`;
-}
+const frame = (windowHtml) => `<div class="frame">${windowHtml}</div>`;
+const INSTALL = 'paseo plugin add npm:@yannelli/paseo-linear-plugin';
 
+// Scenes without a height take the height of their content.
 const SCENES = {
-  social: { width: 1280, height: 640, html: () => `<div class="social" style="height:100%">
-    <div class="social-text">
-      <h1 class="block">Linear issues<br>in Paseo</h1>
-      <ul class="facts block"><li>Browse, edit, and create issues</li><li>Start an agent from an issue</li><li>Use a different Linear key per project</li></ul>
-      <div class="install mono block"><span>paseo plugin add</span> npm:@yannelli/paseo-linear-plugin</div>
+  hero: { width: 1280, height: 640, html: () => `<div class="hero">
+    <div class="grid"></div><div class="glow"></div>
+    <div class="brand block"><svg viewBox="0 0 100 100"><use href="#logo"/></svg>Linear for Paseo</div>
+    <div class="hero-copy">
+      <h1 class="block">Linear issues,<br>in Paseo.</h1>
+      <p class="lead block">Browse and edit issues, then start agents that implement or review them.</p>
+      <div class="command mono block"><span class="dollar">$</span>${INSTALL}<span class="copy">${ic('copy')}</span></div>
     </div>
-    <div class="window block">${detailPane()}</div>
+    <div class="window hero-window block">${detailPane()}</div>
   </div>` },
-  browse: { width: 960, height: 768, html: () => featurePage(
-    'Browse Linear issues in Paseo',
-    'Search, filter, and sort issues. Sub-issues nest under their parent.',
-    browseWindow(),
-  ) },
-  launch: { width: 960, height: 920, html: () => featurePage(
-    'Start an agent from a Linear issue',
-    'Choose the prompt, agent, model, effort, and where the agent runs.',
-    launchWindow(),
-  ) },
-  keys: { width: 960, height: 940, html: () => featurePage(
-    'Use a different Linear key per project',
-    'Keys stay on the daemon host. The daemon never sends them to the app.',
-    settingsWindow(),
-  ) },
+  browse: { width: 960, transparent: true, html: () => frame(browseWindow()) },
+  launch: { width: 960, transparent: true, html: () => frame(launchWindow()) },
+  keys: { width: 960, transparent: true, html: () => frame(settingsWindow()) },
   icon: { width: 256, height: 256, transparent: true, html: () =>
-    '<div class="icon-tile"><svg class="mark" viewBox="0 0 40 32"><use href="#mark"/></svg></div>' },
+    '<svg class="logo-full" viewBox="0 0 100 100"><use href="#logo"/></svg>' },
 };
 
 function describe(node) {
@@ -285,12 +287,13 @@ function layoutProblems(width, height) {
   return problems;
 }
 
-const FONTS = ['Instrument Sans', 'JetBrains Mono'];
+const FONTS = ['Geist', 'Geist Mono'];
 
-window.renderScene = async (name) => {
+window.renderScene = async (name, theme = 'dark') => {
   const scene = SCENES[name];
   if (!scene) throw new Error(`Unknown scene: ${name}`);
-  Object.assign(document.body.style, { width: `${scene.width}px`, height: `${scene.height}px` });
+  document.body.className = `theme-${theme}`;
+  document.body.style.width = `${scene.width}px`;
   if (scene.transparent) document.body.style.background = 'transparent';
   const main = document.createElement('main');
   main.innerHTML = scene.html();
@@ -298,7 +301,9 @@ window.renderScene = async (name) => {
   await Promise.all(FONTS.map((family) => document.fonts.load(`16px "${family}"`)));
   await document.fonts.ready;
   const fonts = FONTS.every((family) => document.fonts.check(`16px "${family}"`));
-  return { width: scene.width, height: scene.height, fonts, problems: layoutProblems(scene.width, scene.height) };
+  const height = scene.height ?? Math.ceil(main.firstElementChild.getBoundingClientRect().height);
+  document.body.style.height = `${height}px`;
+  return { width: scene.width, height, fonts, problems: layoutProblems(scene.width, height) };
 };
 </script>
 </body>

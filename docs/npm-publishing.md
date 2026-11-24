@@ -2,7 +2,7 @@
 
 Created: 2026-10-07. Last updated: 2026-10-07.
 
-The **Release** workflow publishes `@yannelli/paseo-linear-plugin` to npm after the GitHub release step. Paseo 0.10.0 and newer install it with:
+The **Release** workflow publishes `@yannelli/paseo-linear-plugin` to npm after the GitHub release step. Paseo 0.11.0 and newer install it with:
 
 ```sh
 paseo plugin add npm:@yannelli/paseo-linear-plugin
