@@ -128,6 +128,7 @@ node docs/graphics/render.mjs
   - The README picks the version that matches the reader's GitHub theme with `<picture>`
   - `hero-dark.png` is also the GitHub social preview. Upload it in the repository's **Settings → General → Social preview**.
   - `icon.png` is the plugin icon. `paseo-plugin.json` points at it, and `package.json` ships it.
+  - The dark images are the manifest `media`, in listing order, and `package.json` ships them. The first one is the registry card.
 - **Look**
   - Dark follows linear.app, and its windows use Paseo's Zinc dark theme
   - Light follows vercel.com, and its windows use Paseo's light theme

@@ -3,6 +3,12 @@
   "name": "Linear",
   "description": "Browse, triage, and create Linear issues, and start agents that implement or review them",
   "icon": "docs/images/icon.png",
+  "media": [
+    "docs/images/hero-dark.png",
+    "docs/images/browse-dark.png",
+    "docs/images/launch-dark.png",
+    "docs/images/keys-dark.png"
+  ],
   "requirements": {
     "paseo": ">=0.11.0"
   }
