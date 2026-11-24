@@ -79,7 +79,7 @@ export function ProjectSetup(props: {
       <SettingsCard>
         <SettingsAction
           label="Read this repository's guidelines"
-          hint="A read-only Claude or Codex agent reads AGENTS.md, CONTRIBUTING, scripts, and CI, then proposes instructions and steps. It uses this project's default model when that is Claude or Codex. You review each prompt change before it is used."
+          hint="A Codex agent in a read-only sandbox reads AGENTS.md, CONTRIBUTING, scripts, and CI, then proposes instructions and steps. It needs Codex on this host. You review each prompt change before it is used."
           actionLabel={running ? "Reading…" : proposal ? "Run again" : "Start"}
           disabled={running || !config.rootPath}
           onPress={() => begin.mutate()}
