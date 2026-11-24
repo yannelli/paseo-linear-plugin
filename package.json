@@ -3,6 +3,7 @@
   "version": "2.1.2",
   "description": "Browse and triage Linear issues in Paseo and start agents from them",
   "license": "Apache-2.0",
+  "author": "yannelli (https://github.com/yannelli)",
   "type": "module",
   "keywords": [
     "paseo",
