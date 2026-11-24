@@ -255,30 +255,24 @@ describe("waiting when the finish result has no snapshot", () => {
 });
 
 describe("the setup agent", () => {
-  it("runs only on Claude or Codex, with the provider keeping it read-only", async () => {
-    const models = (...ids: string[]) => ids.map((id, index) => ({ id, isDefault: index === 1 }));
+  it("runs only on Codex, in its read-only sandbox", async () => {
     const host = (...ready: string[]) =>
       ({
         providers: {
           snapshot: async () => ({
-            entries: [
-              ...ready.map((provider) => ({ provider, status: "ready", models: models(`${provider}-small`, `${provider}-big`) })),
-              { provider: "claude", status: "unavailable" },
-            ],
+            entries: ready.map((provider) => ({
+              provider,
+              status: "ready",
+              models: [{ id: `${provider}-small` }, { id: `${provider}-big`, isDefault: true }],
+            })),
           }),
         },
       }) as unknown as Paseo;
-    expect(await agentConfigFor(host("opencode", "codex"), "codex/gpt-5.5")).toEqual({
-      provider: "codex/gpt-5.5",
-      modeId: "auto",
-      options: { sandbox_mode: "read-only" },
-    });
-    const claude = await agentConfigFor(host("opencode", "claude", "codex"), "opencode/big-model");
-    expect(claude).toMatchObject({ provider: "claude/claude-big", modeId: "default" });
-    expect(claude.options.disallowedTools).toEqual(expect.arrayContaining(["Bash", "Edit", "Write", "WebFetch", "Task"]));
-    expect(await agentConfigFor(host("codex"), "")).toMatchObject({ provider: "codex/codex-big", modeId: "auto" });
-    expect(await agentConfigFor(host("codex"), "claude")).toMatchObject({ provider: "codex/codex-big" });
-    await expect(agentConfigFor(host("opencode", "pi"), "opencode")).rejects.toThrow(/Claude or Codex/);
+    const launch = { modeId: "auto", options: { sandbox_mode: "read-only" } };
+    expect(await agentConfigFor(host("claude", "codex"), "codex/gpt-5.5")).toEqual({ provider: "codex/gpt-5.5", ...launch });
+    expect(await agentConfigFor(host("claude", "codex"), "claude/opus")).toEqual({ provider: "codex/codex-big", ...launch });
+    expect(await agentConfigFor(host("codex"), "")).toEqual({ provider: "codex/codex-big", ...launch });
+    await expect(agentConfigFor(host("claude", "opencode"), "claude")).rejects.toThrow(/Codex is not ready/);
   });
 
   it("builds a strict schema: all properties required, no extras, no defaults", () => {
