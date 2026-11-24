@@ -62,7 +62,7 @@ Keep these rules when you change code:
 - `shared/` imports only shared code: no Node.js, React, or `server/` modules.
 - Paseo resolves plugin modules only under `client/`, `server/`, and `shared/`. Do not add other module folders at the root.
 - Paseo supplies `@getpaseo/plugin`, `zod`, and React at runtime, so they stay in `devDependencies`. Ask in an issue before you add a runtime dependency.
-- Check the oldest supported Paseo version, 0.11.0, before you use a newer host API or add keys to `paseo-plugin.json`. Detect newer APIs at runtime in `client/compat.ts`, as it does for the SVG icons of Paseo 0.13.
+- Check the oldest supported Paseo version, 0.11.0, before you use a newer host API or add keys to `paseo-plugin.json`. The types in `devDependencies` match 0.11. Detect newer APIs at runtime, as `client/plugin-icon.tsx` does for the SVG icons of Paseo 0.13.
 
 ## Make a change
 
