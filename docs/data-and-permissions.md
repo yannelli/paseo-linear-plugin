@@ -29,6 +29,7 @@ Your key stays on the daemon host.
   - An attached issue sends the identifier, title, URL, status, priority, assignee, project, labels, and description
 - **Setup agent**
   - It reads files in the project, and your agent provider gets what it reads
+  - It runs only on Claude or Codex, read-only. See [Read-only permissions](agents.md#read-only-permissions).
 
 ## Agent access
 

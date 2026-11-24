@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  agentConfigFor,
   createJobStore,
   lastJsonObject,
+  type Paseo,
   type PermissionRequest,
-  safeModeId,
   strictJsonSchema,
   waitUntilIdle,
 } from "../server/agent-runs";
@@ -254,15 +255,30 @@ describe("waiting when the finish result has no snapshot", () => {
 });
 
 describe("the setup agent", () => {
-  it("picks a mode that asks before edits and never a bypass default", () => {
-    const claude = ["plan", "default", "acceptEdits", "auto", "bypassPermissions"];
-    const codex = ["auto", "auto-review", "full-access"];
-    const ids = (list: string[]) => list.map((id) => ({ id }));
-    expect(safeModeId(ids(claude))).toBe("default");
-    expect(safeModeId(ids(codex))).toBe("auto");
-    expect(safeModeId(ids(["read-only", "default"]))).toBe("read-only");
-    expect(safeModeId(ids(["bypass", "full-access"]))).toBeUndefined();
-    expect(safeModeId(undefined)).toBeUndefined();
+  it("runs only on Claude or Codex, with the provider keeping it read-only", async () => {
+    const models = (...ids: string[]) => ids.map((id, index) => ({ id, isDefault: index === 1 }));
+    const host = (...ready: string[]) =>
+      ({
+        providers: {
+          snapshot: async () => ({
+            entries: [
+              ...ready.map((provider) => ({ provider, status: "ready", models: models(`${provider}-small`, `${provider}-big`) })),
+              { provider: "claude", status: "unavailable" },
+            ],
+          }),
+        },
+      }) as unknown as Paseo;
+    expect(await agentConfigFor(host("opencode", "codex"), "codex/gpt-5.5")).toEqual({
+      provider: "codex/gpt-5.5",
+      modeId: "auto",
+      options: { sandbox_mode: "read-only" },
+    });
+    const claude = await agentConfigFor(host("opencode", "claude", "codex"), "opencode/big-model");
+    expect(claude).toMatchObject({ provider: "claude/claude-big", modeId: "default" });
+    expect(claude.options.disallowedTools).toEqual(expect.arrayContaining(["Bash", "Edit", "Write", "WebFetch", "Task"]));
+    expect(await agentConfigFor(host("codex"), "")).toMatchObject({ provider: "codex/codex-big", modeId: "auto" });
+    expect(await agentConfigFor(host("codex"), "claude")).toMatchObject({ provider: "codex/codex-big" });
+    await expect(agentConfigFor(host("opencode", "pi"), "opencode")).rejects.toThrow(/Claude or Codex/);
   });
 
   it("builds a strict schema: all properties required, no extras, no defaults", () => {

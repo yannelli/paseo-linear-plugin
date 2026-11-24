@@ -30,21 +30,36 @@ interface SnapshotEntry {
   provider: string;
   status: string;
   enabled?: boolean;
-  modes?: readonly { id: string; label?: string }[];
+  models?: readonly { id: string; isDefault?: boolean }[];
 }
 
-const SAFE_MODES = [/read.?only/i, /^default$/i, /ask/i];
-const UNSAFE_MODE = /bypass|full|yolo|danger/i;
-
-// Never inherit a provider default that skips approvals. Claude's "default" asks before
-// edits, so an edit attempt stops the run. Codex has no read-only mode; "auto" asks on request.
-export function safeModeId(modes: SnapshotEntry["modes"]): string | undefined {
-  for (const pattern of SAFE_MODES) {
-    const match = modes?.find((mode) => pattern.test(mode.id));
-    if (match) return match.id;
-  }
-  return modes?.find((mode) => !UNSAFE_MODE.test(`${mode.id} ${mode.label ?? ""}`))?.id;
+interface ReadOnlyLaunch {
+  modeId: string;
+  options: Record<string, unknown>;
 }
+
+// Setup runs only where the provider keeps the agent read-only, so no write depends on a
+// permission prompt. Codex runs in its read-only sandbox: `sandbox_mode` replaces the sandbox of
+// the "auto" mode, and every edit asks first. Claude runs without its write, shell, web, and
+// subagent tools, so allow rules in the project's Claude settings cannot grant them; other tools
+// ask first. The plugin answers every prompt with readOnlyAnswer.
+const CLAUDE_BLOCKED_TOOLS = [
+  "Bash",
+  "BashOutput",
+  "KillShell",
+  "Edit",
+  "MultiEdit",
+  "Write",
+  "NotebookEdit",
+  "WebFetch",
+  "WebSearch",
+  "Task",
+  "Agent",
+];
+export const READ_ONLY_LAUNCHES: ReadonlyMap<string, ReadOnlyLaunch> = new Map([
+  ["claude", { modeId: "default", options: { disallowedTools: CLAUDE_BLOCKED_TOOLS } }],
+  ["codex", { modeId: "auto", options: { sandbox_mode: "read-only" } }],
+]);
 
 const UNSUPPORTED_KEYWORDS = new Set([
   "$schema",
@@ -78,17 +93,29 @@ function entriesOf(snapshot: unknown): readonly SnapshotEntry[] {
   return entries.length > 0 ? entries : (value.compactSnapshot?.entries ?? []);
 }
 
-/** Uses `preferred` (`provider` or `provider/model`) when ready, else the first ready provider. */
+/**
+ * Uses `preferred` (`provider` or `provider/model`) when it is a ready read-only provider, else
+ * the first ready one, with the provider's default model when none is given. Paseo creates
+ * agents from `provider/model` only.
+ */
 export async function agentConfigFor(paseo: Paseo, preferred: string) {
-  const entries = entriesOf(await paseo.providers.snapshot()).filter(
+  const ready = entriesOf(await paseo.providers.snapshot()).filter(
     (entry) => entry.status === "ready" && entry.enabled !== false,
   );
-  const wanted = preferred.split("/")[0] ?? "";
-  const entry = entries.find((candidate) => candidate.provider === wanted) ?? entries[0];
-  if (!entry) throw new Error("No agent provider is ready on this host");
-  const provider = entry.provider === wanted && preferred.includes("/") ? preferred : entry.provider;
-  const modeId = safeModeId(entry.modes);
-  return { provider, ...(modeId ? { modeId } : {}) };
+  const [wanted = "", ...rest] = preferred.split("/");
+  const entry = [wanted, ...READ_ONLY_LAUNCHES.keys()]
+    .filter((id) => READ_ONLY_LAUNCHES.has(id))
+    .map((id) => ready.find((candidate) => candidate.provider === id))
+    .find((candidate) => candidate !== undefined);
+  const launch = entry ? READ_ONLY_LAUNCHES.get(entry.provider) : undefined;
+  if (!entry || !launch) {
+    throw new Error("Project setup runs on Claude or Codex, which keep the agent read-only. Neither is ready on this host.");
+  }
+  const model =
+    (entry.provider === wanted && rest.join("/")) ||
+    (entry.models?.find((candidate) => candidate.isDefault) ?? entry.models?.[0])?.id;
+  if (!model) throw new Error(`No ${entry.provider} model is available on this host`);
+  return { provider: `${entry.provider}/${model}`, modeId: launch.modeId, options: launch.options };
 }
 
 /** Parses the last JSON object in an agent reply: a fenced block, the whole text, or braces. */

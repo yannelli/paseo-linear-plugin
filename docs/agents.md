@@ -141,7 +141,7 @@ The daemon reads the issue from Linear before each sync, so a status you changed
 
 The setup agent finds and reads the project's AGENTS.md, CLAUDE.md, CONTRIBUTING, README, scripts, and CI files, and in a monorepo the guidance files of each package. It then proposes project instructions, steps, and text to add to the Implement and Review prompts.
 
-1. In **Settings → Plugins → Linear → Projects**, select **Start** under **Set up with an agent**. The agent runs on the project's default model.
+1. In **Settings → Plugins → Linear → Projects**, select **Start** under **Set up with an agent**. The agent runs on the project's default model when it is Claude or Codex. Otherwise it runs on a ready Claude, then Codex, with that provider's default model.
 2. While it runs, **Open agent** opens the setup agent so you can watch it
 3. Review the proposal. Each change shows the current and proposed text.
 4. Turn off the changes you do not want, and select **Use accepted changes**
@@ -149,7 +149,16 @@ The setup agent finds and reads the project's AGENTS.md, CLAUDE.md, CONTRIBUTING
 
 ### Read-only permissions
 
-The setup agent is told to only read. The plugin starts it in a mode that asks before tool use when the provider has one: **Always Ask** for Claude, never a bypass mode. When the agent asks for permission, the plugin answers:
+Setup runs only on Claude or Codex, because the provider itself keeps the agent read-only. With neither ready, setup does not start.
+
+- **Codex**
+  - Runs in Codex's read-only sandbox, so every edit and every command that writes asks first
+- **Claude**
+  - Runs in **Always Ask** without the Bash, Edit, MultiEdit, Write, NotebookEdit, WebFetch, WebSearch, Task, and Agent tools
+  - Allow rules in the project's Claude settings cannot give those tools back
+  - It reads and searches with Read, Glob, and Grep. Other tools ask first.
+
+The setup agent is also told to only read. When it asks for permission, the plugin answers:
 
 - **Allowed**
   - File reads inside the project folder
@@ -163,4 +172,4 @@ The setup agent is told to only read. The plugin starts it in a mode that asks b
   - The plugin expands wildcards and checks each match
   - A search pattern that looks like a path, such as `/api`, is not a path
 
-The plugin sees only the requests the provider raises. Claude runs some read commands without asking. Codex has no read-only mode, so it runs in its default mode and its own sandbox decides what needs a request.
+The plugin sees only the requests the provider raises. Claude runs some read tools without asking. Codex's sandbox decides what needs a request.
